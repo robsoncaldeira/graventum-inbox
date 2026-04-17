@@ -116,8 +116,9 @@ export default function ConversationPage({
     }
   }
 
-  // Prioridade: query param (mais confiável) > API response > fallback do JID
-  const actualPhone = phoneFromQuery ?? data?.phone ?? decodedPhone.replace('@s.whatsapp.net', '').replace('@lid', '')
+  // Prioridade: API response (extraído dos registros de mensagem — mais confiável para @lid)
+  // > query param (chat list, pode ser LID) > fallback do JID
+  const actualPhone = data?.phone ?? phoneFromQuery ?? decodedPhone.replace('@s.whatsapp.net', '').replace('@lid', '')
   const lead = data?.lead
   const messages = data?.messages ?? []
 
@@ -238,7 +239,7 @@ export default function ConversationPage({
             />
             <button
               type="submit"
-              disabled={(!message.trim() && !file) || sending}
+              disabled={(!message.trim() && !file) || sending || isLoading}
               className="bg-violet-600 hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl px-4 py-2.5 transition-colors flex items-center gap-2 text-sm shrink-0"
             >
               {sending ? (

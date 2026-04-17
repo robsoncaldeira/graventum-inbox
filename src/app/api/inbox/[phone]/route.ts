@@ -62,9 +62,11 @@ export async function GET(
     >
 
     // 2. Extrair número de telefone real para lookup do lead
-    const firstMsg = records[0]
-    const firstKey = firstMsg?.key as Record<string, string> | undefined
-    const altJid = firstKey?.remoteJidAlt ?? null
+    // Para contatos @lid, remoteJidAlt pode não estar no primeiro registro — varrer todos
+    const altJid =
+      (records
+        .map((m) => (m.key as Record<string, string>)?.remoteJidAlt)
+        .find((v) => !!v) ?? null)
     const phone = jidToPhone(remoteJid, altJid)
 
     // 3. Transformar mensagens
