@@ -16,7 +16,11 @@ type Conversation = {
   segmento?: string
 }
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
+const fetcher = async (url: string) => {
+  const r = await fetch(url)
+  if (!r.ok) throw new Error(`HTTP ${r.status}`)
+  return r.json()
+}
 
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime()
@@ -35,9 +39,18 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 export default function InboxPage() {
-  const { data, isLoading } = useSWR<Conversation[]>('/api/inbox', fetcher, {
+  const { data, isLoading, error } = useSWR<Conversation[]>('/api/inbox', fetcher, {
     refreshInterval: 30000,
   })
+
+  if (error) return (
+    <div className="flex min-h-screen bg-zinc-950">
+      <Sidebar />
+      <main className="flex-1 flex items-center justify-center">
+        <p className="text-red-400 text-sm">Erro ao carregar conversas: {error.message}</p>
+      </main>
+    </div>
+  )
 
   return (
     <div className="flex min-h-screen bg-zinc-950">

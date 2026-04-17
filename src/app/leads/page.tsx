@@ -22,7 +22,11 @@ type Lead = {
   funil: 'respondeu' | 'sem_resposta' | 'nao_contatado'
 }
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
+const fetcher = async (url: string) => {
+  const r = await fetch(url)
+  if (!r.ok) throw new Error(`HTTP ${r.status}`)
+  return r.json()
+}
 
 const FUNIL_TABS = [
   { key: 'respondeu', label: 'Responderam', icon: CheckCircle, color: 'text-green-400' },
@@ -39,9 +43,18 @@ function timeAgo(dateStr: string) {
 
 export default function LeadsPage() {
   const [activeTab, setActiveTab] = useState<string>('respondeu')
-  const { data, isLoading } = useSWR<Lead[]>('/api/leads', fetcher, {
+  const { data, isLoading, error } = useSWR<Lead[]>('/api/leads', fetcher, {
     refreshInterval: 60000,
   })
+
+  if (error) return (
+    <div className="flex min-h-screen bg-zinc-950">
+      <Sidebar />
+      <main className="flex-1 flex items-center justify-center">
+        <p className="text-red-400 text-sm">Erro ao carregar leads: {error.message}</p>
+      </main>
+    </div>
+  )
 
   const filtered = (data ?? []).filter((l) => l.funil === activeTab)
   const counts = {
