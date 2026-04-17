@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
     const chats = (await chatsRes.json()) as Array<Record<string, unknown>>
 
     // 2. Filtrar grupos e transformar
-    const conversations = chats
+    const raw = chats
       .filter((c) => {
         const jid = c.remoteJid as string
         return jid && !jid.includes('@g.us') && !jid.includes('@broadcast') && !jid.includes('@newsletter')
@@ -69,6 +69,22 @@ export async function GET(req: NextRequest) {
         }
       })
       .filter((c) => c.contact_phone.length >= 8)
+
+    // Deduplicar por phone — mesmo número pode aparecer como @s.whatsapp.net e @lid
+    const deduped = new Map<string, typeof raw[0]>()
+    for (const c of raw) {
+      const existing = deduped.get(c.contact_phone)
+      if (!existing) {
+        deduped.set(c.contact_phone, c)
+      } else {
+        const existingTs = new Date(existing.ultima_mensagem).getTime()
+        const newTs = new Date(c.ultima_mensagem).getTime()
+        const preferNew = c.remoteJid.includes('@lid') || newTs > existingTs
+        if (preferNew) deduped.set(c.contact_phone, c)
+      }
+    }
+
+    const conversations = Array.from(deduped.values())
       .sort(
         (a, b) =>
           new Date(b.ultima_mensagem).getTime() - new Date(a.ultima_mensagem).getTime()

@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
     if (!chatsRes.ok) throw new Error(`Evolution API ${chatsRes.status}`)
     const chats = (await chatsRes.json()) as Array<Record<string, unknown>>
 
-    const contacts = chats
+    const raw = chats
       .filter((c) => {
         const jid = c.remoteJid as string
         return jid && !jid.includes('@g.us') && !jid.includes('@broadcast') && !jid.includes('@newsletter')
@@ -62,11 +62,29 @@ export async function GET(req: NextRequest) {
           unreadCount,
           fromMe,
           ultima_mensagem: (c.updatedAt as string) || new Date().toISOString(),
-          // estágio padrão se não houver registro no Supabase
           _defaultEstagio: (!fromMe || unreadCount > 0) ? 'em_conversa' : 'novo',
         }
       })
       .filter((c) => c.phone.length >= 8)
+
+    // Deduplicar por phone real — mesmo número pode aparecer como @s.whatsapp.net e @lid
+    // Manter a entrada mais recente; preferir @lid (tem remoteJidAlt = telefone real)
+    const deduped = new Map<string, typeof raw[0]>()
+    for (const c of raw) {
+      const existing = deduped.get(c.phone)
+      if (!existing) {
+        deduped.set(c.phone, c)
+      } else {
+        // Manter o mais recente entre os dois
+        const existingTs = new Date(existing.ultima_mensagem).getTime()
+        const newTs = new Date(c.ultima_mensagem).getTime()
+        // Prefer @lid entry (has real phone via altJid) or the most recent one
+        const preferNew = c.remoteJid.includes('@lid') || newTs > existingTs
+        if (preferNew) deduped.set(c.phone, c)
+      }
+    }
+
+    const contacts = Array.from(deduped.values())
       .sort((a, b) => new Date(b.ultima_mensagem).getTime() - new Date(a.ultima_mensagem).getTime())
 
     // 2. Enriquecer com dados CRM do Supabase
