@@ -118,10 +118,11 @@ export default function LeadsPage() {
   const humans = all.filter((c) => !c.is_bot)
   const bots   = all.filter((c) => c.is_bot)
 
-  // Métricas sobre humanos (bots excluídos)
-  const humanResponded  = humans.filter((c) => !c.fromMe || c.unreadCount > 0).length
-  const humanTotal      = humans.length
-  const humanRate       = humanTotal > 0 ? Math.round((humanResponded / humanTotal) * 100) : 0
+  // Métricas
+  const totalProspected = all.length
+  const totalResponded  = all.filter((c) => !c.fromMe || c.unreadCount > 0).length  // bots + humanos que responderam
+  const humanResponded  = humans.filter((c) => !c.fromMe || c.unreadCount > 0).length  // só humanos que responderam
+  const humanRate       = totalProspected > 0 ? Math.round((humanResponded / totalProspected) * 100) : 0
   const meetings        = humans.filter((c) => c.estagio === 'reuniao_marcada').length
   const wins            = humans.filter((c) => c.estagio === 'ganho').length
   const qualified       = humans.filter((c) => c.estagio === 'qualificado').length
@@ -162,14 +163,14 @@ export default function LeadsPage() {
             </div>
             <div className="grid grid-cols-4 gap-3">
               <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                <p className="text-zinc-500 text-xs mb-1">Total humanos</p>
-                <p className="text-white text-xl font-semibold">{humanTotal}</p>
-                <p className="text-zinc-600 text-xs mt-0.5">de {all.length} contatos</p>
+                <p className="text-zinc-500 text-xs mb-1">Total prospectados</p>
+                <p className="text-white text-xl font-semibold">{totalProspected}</p>
+                <p className="text-zinc-600 text-xs mt-0.5">{totalResponded} responderam · {bots.length} bots</p>
               </div>
               <div className="bg-zinc-900 border border-violet-800/60 rounded-xl p-4">
-                <p className="text-zinc-500 text-xs mb-1">Taxa resp. humana</p>
-                <p className="text-violet-400 text-xl font-semibold">{humanRate}%</p>
-                <p className="text-zinc-600 text-xs mt-0.5">{humanResponded} de {humanTotal} responderam</p>
+                <p className="text-zinc-500 text-xs mb-1">Humanos reais</p>
+                <p className="text-violet-400 text-xl font-semibold">{humanResponded}</p>
+                <p className="text-zinc-600 text-xs mt-0.5">{humanRate}% do total prospectado</p>
               </div>
               <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
                 <p className="text-zinc-500 text-xs mb-1">Qualificados</p>
