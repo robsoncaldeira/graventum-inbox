@@ -89,7 +89,7 @@ export default function InboxPage() {
             {(data ?? []).map((conv) => (
               <Link
                 key={conv.remoteJid}
-                href={`/inbox/${encodeURIComponent(conv.remoteJid)}`}
+                href={`/inbox/${encodeURIComponent(conv.remoteJid)}?phone=${encodeURIComponent(conv.contact_phone)}`}
                 className="block bg-zinc-900 border border-zinc-800 rounded-xl p-4 hover:border-zinc-700 hover:bg-zinc-800/50 transition-all"
               >
                 <div className="flex items-start justify-between gap-3">

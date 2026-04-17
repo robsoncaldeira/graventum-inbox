@@ -3,8 +3,9 @@
 import { use, useState, useRef, useEffect } from 'react'
 import useSWR from 'swr'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
-import { ArrowLeft, Send, Loader2, Building2, MapPin, Star } from 'lucide-react'
+import { ArrowLeft, Send, Loader2, Paperclip, MapPin, Star } from 'lucide-react'
 
 type Message = {
   id: number
@@ -53,9 +54,13 @@ export default function ConversationPage({
 }) {
   const { phone } = use(params)
   const decodedPhone = decodeURIComponent(phone)
+  const searchParams = useSearchParams()
+  const phoneFromQuery = searchParams.get('phone')
   const [message, setMessage] = useState('')
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState('')
+  const [file, setFile] = useState<File | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const { data, mutate, isLoading } = useSWR<ConversationData>(
@@ -70,28 +75,49 @@ export default function ConversationPage({
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault()
-    if (!message.trim() || sending) return
+    if ((!message.trim() && !file) || sending) return
     setSending(true)
     setSendError('')
 
-    const res = await fetch('/api/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone: actualPhone, message }),
-    })
-
-    if (res.ok) {
-      setMessage('')
+    try {
+      if (file) {
+        // Enviar arquivo
+        const fd = new FormData()
+        fd.append('phone', actualPhone)
+        fd.append('file', file)
+        if (message.trim()) fd.append('caption', message.trim())
+        const res = await fetch('/api/send-media', { method: 'POST', body: fd })
+        if (!res.ok) {
+          const err = await res.json()
+          setSendError(err.error ?? 'Erro ao enviar arquivo')
+          setSending(false)
+          return
+        }
+        setFile(null)
+        setMessage('')
+      } else {
+        // Enviar texto
+        const res = await fetch('/api/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: actualPhone, message }),
+        })
+        if (!res.ok) {
+          const err = await res.json()
+          setSendError(err.error ?? 'Erro ao enviar')
+          setSending(false)
+          return
+        }
+        setMessage('')
+      }
       mutate()
-    } else {
-      const err = await res.json()
-      setSendError(err.error ?? 'Erro ao enviar')
+    } finally {
+      setSending(false)
     }
-    setSending(false)
   }
 
-  // O número de telefone real (sem @s.whatsapp.net) vem da API
-  const actualPhone = data?.phone ?? decodedPhone.replace('@s.whatsapp.net', '').replace('@lid', '')
+  // Prioridade: query param (mais confiável) > API response > fallback do JID
+  const actualPhone = phoneFromQuery ?? data?.phone ?? decodedPhone.replace('@s.whatsapp.net', '').replace('@lid', '')
   const lead = data?.lead
   const messages = data?.messages ?? []
 
@@ -172,19 +198,48 @@ export default function ConversationPage({
           {sendError && (
             <p className="text-red-400 text-xs mb-2">{sendError}</p>
           )}
-          <form onSubmit={handleSend} className="flex gap-3">
+          {file && (
+            <div className="flex items-center gap-2 mb-2 bg-zinc-800 rounded-lg px-3 py-2">
+              <Paperclip className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+              <span className="text-zinc-300 text-xs truncate flex-1">{file.name}</span>
+              <button
+                type="button"
+                onClick={() => setFile(null)}
+                className="text-zinc-500 hover:text-white text-xs ml-2 shrink-0"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+          <form onSubmit={handleSend} className="flex gap-2">
+            {/* Botão de anexo */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white rounded-xl px-3 py-2.5 transition-colors shrink-0"
+              title="Anexar arquivo"
+            >
+              <Paperclip className="w-4 h-4" />
+            </button>
             <input
               type="text"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              placeholder="Digite sua mensagem..."
+              placeholder={file ? 'Legenda (opcional)...' : 'Digite sua mensagem...'}
               className="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-white placeholder-zinc-500 text-sm focus:outline-none focus:border-violet-500"
               disabled={sending}
             />
             <button
               type="submit"
-              disabled={!message.trim() || sending}
-              className="bg-violet-600 hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl px-4 py-2.5 transition-colors flex items-center gap-2 text-sm"
+              disabled={(!message.trim() && !file) || sending}
+              className="bg-violet-600 hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl px-4 py-2.5 transition-colors flex items-center gap-2 text-sm shrink-0"
             >
               {sending ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
