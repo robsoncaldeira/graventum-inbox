@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import ContactPanel from '@/components/ContactPanel'
-import { ArrowLeft, Send, Loader2, Paperclip, SlidersHorizontal } from 'lucide-react'
+import { ArrowLeft, Send, Loader2, Paperclip, SlidersHorizontal, Bot } from 'lucide-react'
 
 type Message = {
   id: number
@@ -47,6 +47,7 @@ type ContactData = {
   proximo_followup?: string | null
   motivo_perda?: string | null
   sentimento?: 'positivo' | 'objecao' | 'neutro' | null
+  is_bot?: boolean
 }
 
 const fetcher = async (url: string) => {
@@ -113,7 +114,7 @@ export default function ConversationPage({
 
   // CRM data para o painel lateral
   const actualPhone = data?.phone ?? phoneFromQuery ?? decodedPhone.replace('@s.whatsapp.net', '').replace('@lid', '')
-  const { data: contactData } = useSWR<ContactData | null>(
+  const { data: contactData, mutate: mutateContact } = useSWR<ContactData | null>(
     actualPhone ? `/api/contacts/${encodeURIComponent(actualPhone)}` : null,
     fetcher
   )
@@ -201,7 +202,7 @@ export default function ConversationPage({
   const displayName = contactData?.company_name ?? lead?.company_name ?? contactData?.contact_name ?? decodedPhone
 
   return (
-    <div className="flex min-h-screen bg-zinc-950">
+    <div className="flex h-screen bg-zinc-950 overflow-hidden">
       <Sidebar />
       <main className="flex-1 flex overflow-hidden">
 
@@ -226,6 +227,28 @@ export default function ConversationPage({
                 )}
               </div>
             </div>
+            {/* Botão marcar como bot */}
+            <button
+              onClick={async () => {
+                const newVal = !(contactData?.is_bot ?? false)
+                // Update otimista imediato
+                mutateContact((prev) => prev ? { ...prev, is_bot: newVal } : { phone: actualPhone, is_bot: newVal }, { revalidate: false })
+                await fetch(`/api/contacts/${encodeURIComponent(actualPhone)}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ is_bot: newVal }),
+                })
+                mutateContact()
+              }}
+              title={contactData?.is_bot ? 'Desmarcar bot' : 'Marcar como bot'}
+              className={`p-2 rounded-lg transition-colors ${
+                contactData?.is_bot
+                  ? 'bg-orange-500/20 text-orange-400 hover:bg-orange-500/30'
+                  : 'bg-zinc-800 text-zinc-600 hover:text-orange-400'
+              }`}
+            >
+              <Bot className="w-4 h-4" />
+            </button>
             {/* Botão painel CRM */}
             <button
               onClick={() => setPanelOpen((v) => !v)}
