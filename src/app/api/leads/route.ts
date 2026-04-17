@@ -1,8 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabase } from '@/lib/supabase'
 import { isAuthenticatedFromRequest } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
+
+const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL!
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY!
+const EVOLUTION_INSTANCE = process.env.EVOLUTION_INSTANCE!
+
+function jidToPhone(jid: string, altJid?: string | null): string {
+  if (jid.includes('@lid') && altJid) {
+    return altJid.replace('@s.whatsapp.net', '')
+  }
+  return jid.replace('@s.whatsapp.net', '').replace('@lid', '').replace('@c.us', '')
+}
+
+function extractPreview(lastMsg: Record<string, unknown> | null): string {
+  if (!lastMsg) return ''
+  const m = (lastMsg.message ?? {}) as Record<string, unknown>
+  return (
+    (m.conversation as string) ||
+    ((m.extendedTextMessage as Record<string, string>)?.text) ||
+    ((m.imageMessage as Record<string, string>)?.caption) ||
+    '[mídia]'
+  )
+}
 
 export async function GET(req: NextRequest) {
   if (!isAuthenticatedFromRequest(req)) {
@@ -10,64 +31,54 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const db = getSupabase()
-
-    // Leads com WhatsApp
-    const { data: leads, error } = await db
-      .from('graventum_commercial_leads')
-      .select('id, whatsapp, company_name, status_lead, segmento, score_fit_graventum, cidade, estado')
-      .not('whatsapp', 'is', null)
-      .order('score_fit_graventum', { ascending: false, nullsFirst: false })
-
-    if (error) {
-      console.error('[leads] Supabase error:', JSON.stringify(error))
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
-
-    // Eventos inbound por phone
-    const { data: inboundEvents } = await db
-      .from('comercial_outreach_events')
-      .select('contact_phone, ocorrido_em')
-      .eq('channel', 'whatsapp')
-      .eq('direction', 'inbound')
-
-    const inboundMap = new Map<string, string>()
-    for (const e of inboundEvents ?? []) {
-      const existing = inboundMap.get(e.contact_phone)
-      if (!existing || new Date(e.ocorrido_em) > new Date(existing)) {
-        inboundMap.set(e.contact_phone, e.ocorrido_em)
+    const chatsRes = await fetch(
+      `${EVOLUTION_API_URL}/chat/findChats/${EVOLUTION_INSTANCE}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: EVOLUTION_API_KEY },
+        body: JSON.stringify({}),
       }
-    }
+    )
 
-    // Eventos outbound por phone
-    const { data: outboundEvents } = await db
-      .from('comercial_outreach_events')
-      .select('contact_phone')
-      .eq('channel', 'whatsapp')
-      .eq('direction', 'outbound')
+    if (!chatsRes.ok) throw new Error(`Evolution API ${chatsRes.status}`)
 
-    const outboundSet = new Set((outboundEvents ?? []).map((e) => e.contact_phone))
+    const chats = (await chatsRes.json()) as Array<Record<string, unknown>>
 
-    const result = (leads ?? []).map((l) => {
-      const respondeu = inboundMap.has(l.whatsapp)
-      const enviado = outboundSet.has(l.whatsapp)
-      return {
-        ...l,
-        respondeu,
-        ultima_resposta: inboundMap.get(l.whatsapp) ?? null,
-        contato_iniciado: enviado,
-        funil: respondeu
-          ? 'respondeu'
-          : enviado
-          ? 'sem_resposta'
-          : 'nao_contatado',
-      }
-    })
+    const contacts = chats
+      .filter((c) => {
+        const jid = c.remoteJid as string
+        return jid && !jid.includes('@g.us') && !jid.includes('@broadcast') && !jid.includes('@newsletter')
+      })
+      .map((c) => {
+        const jid = c.remoteJid as string
+        const lastMsg = c.lastMessage as Record<string, unknown> | null
+        const altJid = (lastMsg?.key as Record<string, string>)?.remoteJidAlt ?? null
+        const phone = jidToPhone(jid, altJid)
+        const fromMe = (lastMsg?.key as Record<string, boolean>)?.fromMe ?? false
+        const unreadCount = (c.unreadCount as number) || 0
+        const updatedAt = (c.updatedAt as string) || new Date().toISOString()
 
-    return NextResponse.json(result)
+        // funil: respondeu = última mensagem é deles (fromMe=false) ou têm não lidas
+        // sem_resposta = última mensagem foi nossa (fromMe=true)
+        const funil = (!fromMe || unreadCount > 0) ? 'respondeu' : 'sem_resposta'
+
+        return {
+          remoteJid: jid,
+          phone,
+          pushName: (c.pushName as string) || null,
+          preview: extractPreview(lastMsg),
+          unreadCount,
+          fromMe,
+          ultima_mensagem: updatedAt,
+          funil,
+        }
+      })
+      .filter((c) => c.phone.length >= 8)
+      .sort((a, b) => new Date(b.ultima_mensagem).getTime() - new Date(a.ultima_mensagem).getTime())
+
+    return NextResponse.json(contacts)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
-    console.error('[leads] Unexpected error:', msg)
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
