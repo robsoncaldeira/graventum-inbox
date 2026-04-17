@@ -18,7 +18,10 @@ export async function GET(req: NextRequest) {
     .not('whatsapp', 'is', null)
     .order('score_fit_graventum', { ascending: false })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[leads] Supabase error:', JSON.stringify(error))
+    return NextResponse.json({ error: error.message, details: error }, { status: 500 })
+  }
 
   // Eventos inbound por phone
   const { data: inboundEvents } = await db
