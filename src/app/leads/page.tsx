@@ -4,7 +4,7 @@ import { useState, useLayoutEffect } from 'react'
 import useSWR, { mutate as globalMutate } from 'swr'
 import Link from 'next/link'
 import Sidebar from '@/components/Sidebar'
-import { MessageCircle, Users, TrendingUp, Calendar, Trophy, XCircle, Ghost, Sprout, Bot } from 'lucide-react'
+import { MessageCircle, Users, TrendingUp, Calendar, Trophy, XCircle, Ghost, Sprout, Bot, Search, X } from 'lucide-react'
 
 type Contact = {
   remoteJid: string
@@ -46,6 +46,7 @@ const SENTIMENTO_BADGE: Record<string, { label: string; color: string }> = {
 const TABS = [
   { key: 'all',            label: 'Todos',       icon: Users,          botFilter: false },
   { key: 'em_conversa',    label: 'Responderam', icon: MessageCircle,  botFilter: false },
+  { key: 'followup',       label: 'Follow-up',   icon: Calendar,       botFilter: false },
   { key: 'qualificado',    label: 'Qualificados',icon: TrendingUp,     botFilter: false },
   { key: 'nutricao',       label: 'Nutrição',    icon: Sprout,         botFilter: false },
   { key: 'reuniao_marcada',label: 'Reunião',     icon: Calendar,       botFilter: false },
@@ -89,6 +90,7 @@ async function toggleBot(phone: string, isBot: boolean) {
 
 export default function LeadsPage() {
   const [activeTab, setActiveTab] = useState('all')
+  const [search, setSearch] = useState('')
 
   // useLayoutEffect: roda antes do paint, sem flash de "Todos"
   useLayoutEffect(() => {
@@ -131,19 +133,37 @@ export default function LeadsPage() {
   // "Em conversa" = atividade WA real (respondeu, independente do estágio CRM)
   const hasWaActivity = (c: Contact) => !c.fromMe || c.unreadCount > 0
 
+  const hasFollowup = (c: Contact) => !!c.proximo_followup
+
   const countFor = (key: string) => {
     if (key === 'all')         return humans.length
     if (key === 'bot')         return bots.length
     if (key === 'em_conversa') return humans.filter(hasWaActivity).length
+    if (key === 'followup')    return humans.filter(hasFollowup).length
     return humans.filter((c) => c.estagio === key).length
   }
 
-  const filtered = (() => {
+  const byTab = (() => {
     if (activeTab === 'all')         return humans
     if (activeTab === 'bot')         return bots
     if (activeTab === 'em_conversa') return humans.filter(hasWaActivity)
+    if (activeTab === 'followup')    return humans.filter(hasFollowup).sort((a, b) =>
+      new Date(a.proximo_followup!).getTime() - new Date(b.proximo_followup!).getTime()
+    )
     return humans.filter((c) => c.estagio === activeTab)
   })()
+
+  const filtered = search.trim()
+    ? byTab.filter((c) => {
+        const q = search.toLowerCase()
+        return (
+          c.phone.includes(q) ||
+          (c.company_name ?? '').toLowerCase().includes(q) ||
+          (c.contact_name ?? '').toLowerCase().includes(q) ||
+          (c.pushName ?? '').toLowerCase().includes(q)
+        )
+      })
+    : byTab
 
   return (
     <div className="flex min-h-screen bg-zinc-950">
@@ -183,6 +203,25 @@ export default function LeadsPage() {
                 <p className="text-white text-xl font-semibold">{meetings}</p>
                 <p className="text-zinc-600 text-xs mt-0.5">{wins} ganhos</p>
               </div>
+            </div>
+          </div>
+
+          {/* Busca + filtro follow-up */}
+          <div className="flex gap-2 mb-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500 pointer-events-none" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar por nome, empresa ou telefone..."
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-9 pr-8 py-2 text-white text-xs placeholder-zinc-600 focus:outline-none focus:border-violet-500"
+              />
+              {search && (
+                <button onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           </div>
 
