@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
     // Leads com WhatsApp
     const { data: leads, error } = await db
       .from('graventum_commercial_leads')
-      .select('id, whatsapp, nome_empresa, nome_contato, status_lead, segmento, score_fit_graventum, cidade, estado')
+      .select('id, whatsapp, company_name, status_lead, segmento, score_fit_graventum, cidade, estado')
       .not('whatsapp', 'is', null)
       .order('score_fit_graventum', { ascending: false, nullsFirst: false })
 

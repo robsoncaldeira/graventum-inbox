@@ -12,8 +12,7 @@ type Conversation = {
   preview: string
   unreadCount: number
   pushName?: string
-  nome_empresa?: string
-  nome_contato?: string
+  company_name?: string
   status_lead?: string
   segmento?: string
   fromMe?: boolean
@@ -96,7 +95,7 @@ export default function InboxPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-white font-medium text-sm truncate">
-                        {conv.nome_empresa ?? conv.pushName ?? conv.contact_phone}
+                        {conv.company_name ?? conv.pushName ?? conv.contact_phone}
                       </span>
                       {conv.status_lead && (
                         <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${STATUS_COLORS[conv.status_lead] ?? 'bg-zinc-700 text-zinc-300'}`}>
@@ -104,9 +103,6 @@ export default function InboxPage() {
                         </span>
                       )}
                     </div>
-                    {conv.nome_contato && (
-                      <p className="text-zinc-500 text-xs mb-1">{conv.nome_contato}</p>
-                    )}
                     <p className="text-zinc-400 text-sm truncate">{conv.preview}</p>
                   </div>
                   <div className="text-right shrink-0">

@@ -9,8 +9,7 @@ import { MessageCircle, Users, CheckCircle, Clock, XCircle, MapPin, Star } from 
 type Lead = {
   id: number
   whatsapp: string
-  nome_empresa?: string
-  nome_contato?: string
+  company_name?: string
   status_lead?: string
   segmento?: string
   score_fit_graventum?: number
@@ -119,7 +118,7 @@ export default function LeadsPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
                     <span className="text-white font-medium text-sm truncate">
-                      {lead.nome_empresa ?? lead.whatsapp}
+                      {lead.company_name ?? lead.whatsapp}
                     </span>
                     {lead.segmento && (
                       <span className="text-xs text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded-full shrink-0">
@@ -128,7 +127,6 @@ export default function LeadsPage() {
                     )}
                   </div>
                   <div className="flex items-center gap-3 text-xs text-zinc-600">
-                    {lead.nome_contato && <span>{lead.nome_contato}</span>}
                     {lead.cidade && (
                       <span className="flex items-center gap-1">
                         <MapPin className="w-3 h-3" />

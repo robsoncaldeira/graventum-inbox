@@ -17,8 +17,7 @@ type Message = {
 }
 
 type Lead = {
-  nome_empresa?: string
-  nome_contato?: string
+  company_name?: string
   status_lead?: string
   segmento?: string
   score_fit_graventum?: number
@@ -79,9 +78,26 @@ export default function ConversationPage({
     setSending(true)
     setSendError('')
 
+    const optimisticText = file
+      ? (message.trim() ? `[arquivo] ${message.trim()}` : '[arquivo]')
+      : message.trim()
+
+    // Update otimista — mensagem aparece imediatamente
+    const optimisticMsg: Message = {
+      id: Date.now(),
+      direction: 'outbound',
+      event_text: optimisticText,
+      ocorrido_em: new Date().toISOString(),
+      event_type: file ? 'media' : 'text',
+      metadata: { sent_by: 'team_inbox', optimistic: true },
+    }
+    mutate(
+      (prev) => prev ? { ...prev, messages: [...prev.messages, optimisticMsg] } : prev,
+      { revalidate: false }
+    )
+
     try {
       if (file) {
-        // Enviar arquivo
         const fd = new FormData()
         fd.append('phone', actualPhone)
         fd.append('file', file)
@@ -90,13 +106,13 @@ export default function ConversationPage({
         if (!res.ok) {
           const err = await res.json()
           setSendError(err.error ?? 'Erro ao enviar arquivo')
-          setSending(false)
+          // Reverter update otimista
+          mutate()
           return
         }
         setFile(null)
         setMessage('')
       } else {
-        // Enviar texto
         const res = await fetch('/api/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -105,12 +121,14 @@ export default function ConversationPage({
         if (!res.ok) {
           const err = await res.json()
           setSendError(err.error ?? 'Erro ao enviar')
-          setSending(false)
+          // Reverter update otimista
+          mutate()
           return
         }
         setMessage('')
       }
-      mutate()
+      // Aguarda 1s para a Evolution API indexar, depois revalida
+      setTimeout(() => mutate(), 1000)
     } finally {
       setSending(false)
     }
@@ -133,7 +151,7 @@ export default function ConversationPage({
           </Link>
           <div className="flex-1">
             <h1 className="text-white font-medium">
-              {lead?.nome_empresa ?? decodedPhone}
+              {lead?.company_name ?? decodedPhone}
             </h1>
             <p className="text-zinc-500 text-sm">{actualPhone}</p>
           </div>

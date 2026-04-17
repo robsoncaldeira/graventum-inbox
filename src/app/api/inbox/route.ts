@@ -78,7 +78,7 @@ export async function GET(req: NextRequest) {
     const phones = conversations.map((c) => c.contact_phone)
     const { data: leads } = await getSupabase()
       .from('graventum_commercial_leads')
-      .select('whatsapp, nome_empresa, nome_contato, status_lead, segmento')
+      .select('whatsapp, company_name, status_lead, segmento')
       .in('whatsapp', phones)
 
     const leadsMap = new Map((leads ?? []).map((l) => [l.whatsapp, l]))

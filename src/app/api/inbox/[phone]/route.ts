@@ -95,7 +95,7 @@ export async function GET(
     const { data: leadData } = await getSupabase()
       .from('graventum_commercial_leads')
       .select(
-        'nome_empresa, nome_contato, status_lead, segmento, score_fit_graventum, cidade, estado'
+        'company_name, status_lead, segmento, score_fit_graventum, cidade, estado'
       )
       .eq('whatsapp', phone)
       .maybeSingle()
