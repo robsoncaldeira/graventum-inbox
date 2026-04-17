@@ -1,9 +1,8 @@
 'use client'
 
-import { useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import useSWR, { mutate as globalMutate } from 'swr'
 import Link from 'next/link'
-import { useRouter, useSearchParams } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import { MessageCircle, Users, TrendingUp, Calendar, Trophy, XCircle, Ghost, Sprout, Bot } from 'lucide-react'
 
@@ -89,13 +88,18 @@ async function toggleBot(phone: string, isBot: boolean) {
 }
 
 export default function LeadsPage() {
-  const searchParams = useSearchParams()
-  const router = useRouter()
-  const activeTab = searchParams.get('tab') ?? 'all'
+  const [activeTab, setActiveTab] = useState('all')
 
-  const setActiveTab = useCallback((tab: string) => {
-    router.replace(`/leads?tab=${tab}`, { scroll: false })
-  }, [router])
+  // Restaura tab ao montar (persiste entre navegações)
+  useEffect(() => {
+    const saved = sessionStorage.getItem('leads_tab')
+    if (saved) setActiveTab(saved)
+  }, [])
+
+  const handleSetTab = (tab: string) => {
+    setActiveTab(tab)
+    sessionStorage.setItem('leads_tab', tab)
+  }
 
   const { data, isLoading, error } = useSWR<Contact[]>('/api/leads', fetcher, {
     refreshInterval: 60000,
@@ -184,7 +188,7 @@ export default function LeadsPage() {
               return (
                 <button
                   key={key}
-                  onClick={() => setActiveTab(key)}
+                  onClick={() => handleSetTab(key)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors ${
                     activeTab === key
                       ? isBot ? 'bg-zinc-800 text-orange-400' : 'bg-zinc-800 text-white'
