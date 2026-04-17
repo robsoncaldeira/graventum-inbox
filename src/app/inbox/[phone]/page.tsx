@@ -100,6 +100,8 @@ export default function ConversationPage({
   const [sendError, setSendError] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [panelOpen, setPanelOpen] = useState(false)
+  // Mensagens enviadas localmente — imunes a refreshes do SWR
+  const [pendingMessages, setPendingMessages] = useState<Message[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -116,9 +118,23 @@ export default function ConversationPage({
     fetcher
   )
 
+  // Remove pendentes que já foram confirmados pelo servidor
+  useEffect(() => {
+    if (!data?.messages || pendingMessages.length === 0) return
+    const serverTexts = new Set(
+      data.messages
+        .filter((m) => m.direction === 'outbound')
+        .map((m) => m.event_text)
+    )
+    setPendingMessages((prev) =>
+      prev.filter((m) => !serverTexts.has(m.event_text))
+    )
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.messages])
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [data?.messages])
+  }, [data?.messages, pendingMessages])
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault()
@@ -130,18 +146,18 @@ export default function ConversationPage({
       ? (message.trim() ? `[arquivo] ${message.trim()}` : '[arquivo]')
       : message.trim()
 
+    const pendingId = Date.now()
     const optimisticMsg: Message = {
-      id: Date.now(),
+      id: pendingId,
       direction: 'outbound',
       event_text: optimisticText,
       ocorrido_em: new Date().toISOString(),
       event_type: file ? 'media' : 'text',
-      metadata: { sent_by: 'team_inbox', optimistic: true },
+      metadata: { sent_by: 'team_inbox' },
     }
-    mutate(
-      (prev) => prev ? { ...prev, messages: [...prev.messages, optimisticMsg] } : prev,
-      { revalidate: false }
-    )
+
+    // Adiciona ao estado local — não toca no cache do SWR
+    setPendingMessages((prev) => [...prev, optimisticMsg])
 
     try {
       if (file) {
@@ -153,7 +169,7 @@ export default function ConversationPage({
         if (!res.ok) {
           const err = await res.json()
           setSendError(err.error ?? 'Erro ao enviar arquivo')
-          mutate()
+          setPendingMessages((prev) => prev.filter((m) => m.id !== pendingId))
           return
         }
         setFile(null)
@@ -167,36 +183,21 @@ export default function ConversationPage({
         if (!res.ok) {
           const err = await res.json()
           setSendError(err.error ?? 'Erro ao enviar')
-          mutate()
+          setPendingMessages((prev) => prev.filter((m) => m.id !== pendingId))
           return
         }
         setMessage('')
       }
-      // Revalida após 4s, mas mantém mensagens otimistas que ainda não aparecerem no servidor
-      setTimeout(() => {
-        mutate(async (current) => {
-          const fresh: ConversationData = await fetcher(`/api/inbox/${encodeURIComponent(decodedPhone)}`)
-          if (!current) return fresh
-          // Textos já confirmados pelo servidor
-          const confirmed = new Set(
-            fresh.messages.map((m) => `${m.direction}|${m.event_text}`)
-          )
-          // Manter otimistas ainda não confirmados
-          const pendingOptimistic = current.messages.filter(
-            (m) =>
-              (m.metadata as Record<string, unknown>)?.optimistic &&
-              !confirmed.has(`${m.direction}|${m.event_text}`)
-          )
-          return { ...fresh, messages: [...fresh.messages, ...pendingOptimistic] }
-        })
-      }, 4000)
+      // Revalida após 4s — quando retornar, o useEffect abaixo remove o pendente
+      setTimeout(() => mutate(), 4000)
     } finally {
       setSending(false)
     }
   }
 
   const lead = data?.lead
-  const messages = data?.messages ?? []
+  // Mensagens do servidor + pendentes locais (não somem com refresh do SWR)
+  const messages = [...(data?.messages ?? []), ...pendingMessages]
   const displayName = contactData?.company_name ?? lead?.company_name ?? contactData?.contact_name ?? decodedPhone
 
   return (
@@ -255,7 +256,7 @@ export default function ConversationPage({
                     msg.direction === 'outbound'
                       ? 'bg-violet-700 text-white rounded-br-sm'
                       : 'bg-zinc-800 text-zinc-100 rounded-bl-sm'
-                  } ${(msg.metadata as Record<string, unknown>)?.optimistic ? 'opacity-70' : ''}`}
+                  } ${pendingMessages.some((p) => p.id === msg.id) ? 'opacity-70' : ''}`}
                 >
                   <p className="text-sm whitespace-pre-wrap break-words">{msg.event_text}</p>
                   <p className={`text-xs mt-1 ${msg.direction === 'outbound' ? 'text-violet-300' : 'text-zinc-500'}`}>
