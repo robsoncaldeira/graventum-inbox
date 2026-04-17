@@ -91,7 +91,32 @@ export async function GET(
           new Date(a.ocorrido_em).getTime() - new Date(b.ocorrido_em).getTime()
       )
 
-    // 4. Buscar dados do lead no Supabase
+    // 4. Marcar conversa como lida na Evolution API (fire-and-forget)
+    const lastInbound = [...records].reverse().find(
+      (m) => !(m.key as Record<string, unknown>)?.fromMe
+    )
+    if (lastInbound) {
+      const key = lastInbound.key as Record<string, unknown>
+      fetch(
+        `${EVOLUTION_API_URL}/chat/markChatAsRead/${EVOLUTION_INSTANCE}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', apikey: EVOLUTION_API_KEY },
+          body: JSON.stringify({
+            lastMessage: {
+              key: {
+                remoteJid,
+                fromMe: false,
+                id: key.id,
+              },
+            },
+            read: true,
+          }),
+        }
+      ).catch(() => {/* ignora erro — não bloqueia a resposta */})
+    }
+
+    // 5. Buscar dados do lead no Supabase
     const { data: leadData } = await getSupabase()
       .from('graventum_commercial_leads')
       .select(
