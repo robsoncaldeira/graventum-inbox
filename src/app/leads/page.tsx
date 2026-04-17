@@ -91,6 +91,7 @@ async function toggleBot(phone: string, isBot: boolean) {
 export default function LeadsPage() {
   const [activeTab, setActiveTab] = useState('all')
   const [search, setSearch] = useState('')
+  const [dateFilter, setDateFilter] = useState('all')
 
   // useLayoutEffect: roda antes do paint, sem flash de "Todos"
   useLayoutEffect(() => {
@@ -161,8 +162,20 @@ export default function LeadsPage() {
     return humans.filter((c) => c.estagio === activeTab)
   })()
 
+  const dateThreshold = (() => {
+    const now = Date.now()
+    if (dateFilter === '1d')  return now - 1  * 24 * 3600000
+    if (dateFilter === '7d')  return now - 7  * 24 * 3600000
+    if (dateFilter === '30d') return now - 30 * 24 * 3600000
+    return null
+  })()
+
+  const afterDateFilter = dateThreshold
+    ? byTab.filter((c) => new Date(c.ultima_mensagem).getTime() >= dateThreshold)
+    : byTab
+
   const filtered = search.trim()
-    ? byTab.filter((c) => {
+    ? afterDateFilter.filter((c) => {
         const q = search.toLowerCase()
         return (
           c.phone.includes(q) ||
@@ -171,7 +184,7 @@ export default function LeadsPage() {
           (c.pushName ?? '').toLowerCase().includes(q)
         )
       })
-    : byTab
+    : afterDateFilter
 
   return (
     <div className="flex h-screen bg-zinc-950 overflow-hidden">
@@ -214,7 +227,7 @@ export default function LeadsPage() {
             </div>
           </div>
 
-          {/* Busca + filtro follow-up */}
+          {/* Busca + filtro de período */}
           <div className="flex gap-2 mb-4">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500 pointer-events-none" />
@@ -231,6 +244,18 @@ export default function LeadsPage() {
                 </button>
               )}
             </div>
+            <select
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className={`bg-zinc-900 border rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-violet-500 shrink-0 ${
+                dateFilter !== 'all' ? 'border-violet-600 text-violet-300' : 'border-zinc-800 text-zinc-400'
+              }`}
+            >
+              <option value="all">Todos os períodos</option>
+              <option value="1d">Últimas 24h</option>
+              <option value="7d">Últimos 7 dias</option>
+              <option value="30d">Últimos 30 dias</option>
+            </select>
           </div>
 
           {/* Tabs */}
