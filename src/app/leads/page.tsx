@@ -45,7 +45,7 @@ const SENTIMENTO_BADGE: Record<string, { label: string; color: string }> = {
 
 const TABS = [
   { key: 'all',            label: 'Todos',       icon: Users,          botFilter: false },
-  { key: 'em_conversa',    label: 'Em conversa', icon: MessageCircle,  botFilter: false },
+  { key: 'em_conversa',    label: 'Responderam', icon: MessageCircle,  botFilter: false },
   { key: 'qualificado',    label: 'Qualificados',icon: TrendingUp,     botFilter: false },
   { key: 'nutricao',       label: 'Nutrição',    icon: Sprout,         botFilter: false },
   { key: 'reuniao_marcada',label: 'Reunião',     icon: Calendar,       botFilter: false },
@@ -126,16 +126,20 @@ export default function LeadsPage() {
   const wins            = humans.filter((c) => c.estagio === 'ganho').length
   const qualified       = humans.filter((c) => c.estagio === 'qualificado').length
 
-  // Contagem por tab (bots excluídos de todas as tabs exceto 'bot')
+  // "Em conversa" = atividade WA real (respondeu, independente do estágio CRM)
+  const hasWaActivity = (c: Contact) => !c.fromMe || c.unreadCount > 0
+
   const countFor = (key: string) => {
-    if (key === 'all') return humans.length
-    if (key === 'bot') return bots.length
+    if (key === 'all')         return humans.length
+    if (key === 'bot')         return bots.length
+    if (key === 'em_conversa') return humans.filter(hasWaActivity).length
     return humans.filter((c) => c.estagio === key).length
   }
 
   const filtered = (() => {
-    if (activeTab === 'all') return humans
-    if (activeTab === 'bot') return bots
+    if (activeTab === 'all')         return humans
+    if (activeTab === 'bot')         return bots
+    if (activeTab === 'em_conversa') return humans.filter(hasWaActivity)
     return humans.filter((c) => c.estagio === activeTab)
   })()
 
