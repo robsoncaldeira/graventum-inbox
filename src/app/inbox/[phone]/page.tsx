@@ -236,7 +236,7 @@ export default function ConversationPage({
                 await fetch(`/api/contacts/${encodeURIComponent(actualPhone)}`, {
                   method: 'PATCH',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ is_bot: newVal }),
+                  body: JSON.stringify({ is_bot: newVal, remote_jid: decodedPhone }),
                 })
                 mutateContact()
               }}
