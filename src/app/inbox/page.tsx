@@ -3,7 +3,7 @@
 import useSWR from 'swr'
 import Link from 'next/link'
 import Sidebar from '@/components/Sidebar'
-import { MessageCircle, Building2, Clock } from 'lucide-react'
+import { MessageCircle, Clock } from 'lucide-react'
 
 type Conversation = {
   remoteJid: string
@@ -41,9 +41,17 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 export default function InboxPage() {
-  const { data, isLoading, error } = useSWR<Conversation[]>('/api/inbox', fetcher, {
+  const { data, isLoading, error, mutate } = useSWR<Conversation[]>('/api/inbox', fetcher, {
     refreshInterval: 30000,
+    revalidateOnFocus: true,
   })
+
+  function markAsRead(remoteJid: string) {
+    mutate(
+      (prev) => prev?.map((c) => c.remoteJid === remoteJid ? { ...c, unreadCount: 0 } : c),
+      { revalidate: false }
+    )
+  }
 
   if (error) return (
     <div className="flex min-h-screen bg-zinc-950">
@@ -55,9 +63,9 @@ export default function InboxPage() {
   )
 
   return (
-    <div className="flex min-h-screen bg-zinc-950">
+    <div className="flex h-screen bg-zinc-950 overflow-hidden">
       <Sidebar />
-      <main className="flex-1 p-6">
+      <main className="flex-1 overflow-y-auto p-6">
         <div className="max-w-3xl mx-auto">
           <div className="flex items-center justify-between mb-6">
             <div>
@@ -89,6 +97,7 @@ export default function InboxPage() {
               <Link
                 key={conv.remoteJid}
                 href={`/inbox/${encodeURIComponent(conv.remoteJid)}?phone=${encodeURIComponent(conv.contact_phone)}`}
+                onClick={() => markAsRead(conv.remoteJid)}
                 className="block bg-zinc-900 border border-zinc-800 rounded-xl p-4 hover:border-zinc-700 hover:bg-zinc-800/50 transition-all"
               >
                 <div className="flex items-start justify-between gap-3">

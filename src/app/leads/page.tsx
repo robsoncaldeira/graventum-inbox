@@ -166,9 +166,9 @@ export default function LeadsPage() {
     : byTab
 
   return (
-    <div className="flex min-h-screen bg-zinc-950">
+    <div className="flex h-screen bg-zinc-950 overflow-hidden">
       <Sidebar />
-      <main className="flex-1 p-6">
+      <main className="flex-1 overflow-y-auto p-6">
         <div className="max-w-4xl mx-auto">
 
           {/* Header com métricas */}

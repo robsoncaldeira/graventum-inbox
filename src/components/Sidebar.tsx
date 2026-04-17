@@ -23,7 +23,7 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="w-56 bg-zinc-900 border-r border-zinc-800 flex flex-col min-h-screen">
+    <aside className="w-56 bg-zinc-900 border-r border-zinc-800 flex flex-col h-full shrink-0">
       <div className="px-4 py-5 border-b border-zinc-800">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 bg-violet-600 rounded-lg flex items-center justify-center">
