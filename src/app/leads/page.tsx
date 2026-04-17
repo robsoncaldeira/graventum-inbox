@@ -105,7 +105,7 @@ export default function LeadsPage() {
 
   const { data, isLoading, error, mutate } = useSWR<Contact[]>('/api/leads', fetcher, {
     refreshInterval: 60000,
-    revalidateOnFocus: true,
+    revalidateOnFocus: false,
   })
 
   function markAsRead(remoteJid: string) {

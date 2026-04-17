@@ -91,7 +91,13 @@ export async function GET(
           new Date(a.ocorrido_em).getTime() - new Date(b.ocorrido_em).getTime()
       )
 
-    // 4. Marcar conversa como lida na Evolution API (fire-and-forget)
+    // 4. Registrar last_read_at no Supabase (fonte de verdade para badge de não lido)
+    getSupabase()
+      .from('inbox_contacts')
+      .upsert({ phone, last_read_at: new Date().toISOString() }, { onConflict: 'phone' })
+      .then(() => {/* fire-and-forget */})
+
+    // 5. Tentar marcar como lida na Evolution API também (best-effort)
     const inboundMessages = records.filter(
       (m) => !(m.key as Record<string, unknown>)?.fromMe
     )
@@ -107,7 +113,7 @@ export async function GET(
           headers: { 'Content-Type': 'application/json', apikey: EVOLUTION_API_KEY },
           body: JSON.stringify({ readMessages }),
         }
-      ).catch(() => {/* ignora erro — não bloqueia a resposta */})
+      ).catch(() => {/* ignora erro */})
     }
 
     // 5. Buscar dados do lead no Supabase

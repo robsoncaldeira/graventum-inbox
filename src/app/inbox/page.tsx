@@ -43,7 +43,7 @@ const STATUS_COLORS: Record<string, string> = {
 export default function InboxPage() {
   const { data, isLoading, error, mutate } = useSWR<Conversation[]>('/api/inbox', fetcher, {
     refreshInterval: 30000,
-    revalidateOnFocus: true,
+    revalidateOnFocus: false,
   })
 
   function markAsRead(remoteJid: string) {

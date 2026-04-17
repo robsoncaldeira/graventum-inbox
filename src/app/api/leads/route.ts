@@ -73,7 +73,7 @@ export async function GET(req: NextRequest) {
     const phones = contacts.map((c) => c.phone)
     const { data: crmRecords } = await getSupabase()
       .from('inbox_contacts')
-      .select('phone, remote_jid, push_name, company_name, contact_name, estagio, icp_fit, proximo_followup, sentimento, notas, is_bot')
+      .select('phone, remote_jid, push_name, company_name, contact_name, estagio, icp_fit, proximo_followup, sentimento, notas, is_bot, last_read_at')
       .in('phone', phones)
 
     // Mapa primário por phone (real) + secundário por remote_jid stripped (para @lid)
@@ -92,8 +92,13 @@ export async function GET(req: NextRequest) {
 
     const result = contacts.map((c) => {
       const crm = crmByPhone.get(c.phone) ?? crmByJid.get(c.phone)
+      // Se a conversa foi aberta depois da última mensagem, considera lida
+      const isRead = crm?.last_read_at
+        ? new Date(crm.last_read_at) >= new Date(c.ultima_mensagem)
+        : false
       return {
         ...c,
+        unreadCount: isRead ? 0 : c.unreadCount,
         company_name: crm?.company_name ?? null,
         contact_name: crm?.contact_name ?? null,
         estagio: crm?.estagio ?? c._defaultEstagio,
