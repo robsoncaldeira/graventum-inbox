@@ -172,7 +172,24 @@ export default function ConversationPage({
         }
         setMessage('')
       }
-      setTimeout(() => mutate(), 1000)
+      // Revalida após 4s, mas mantém mensagens otimistas que ainda não aparecerem no servidor
+      setTimeout(() => {
+        mutate(async (current) => {
+          const fresh: ConversationData = await fetcher(`/api/inbox/${encodeURIComponent(decodedPhone)}`)
+          if (!current) return fresh
+          // Textos já confirmados pelo servidor
+          const confirmed = new Set(
+            fresh.messages.map((m) => `${m.direction}|${m.event_text}`)
+          )
+          // Manter otimistas ainda não confirmados
+          const pendingOptimistic = current.messages.filter(
+            (m) =>
+              (m.metadata as Record<string, unknown>)?.optimistic &&
+              !confirmed.has(`${m.direction}|${m.event_text}`)
+          )
+          return { ...fresh, messages: [...fresh.messages, ...pendingOptimistic] }
+        })
+      }, 4000)
     } finally {
       setSending(false)
     }
