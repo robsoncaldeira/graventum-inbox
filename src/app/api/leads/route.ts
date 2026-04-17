@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getSupabase } from '@/lib/supabase'
 import { isAuthenticatedFromRequest } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
@@ -8,9 +9,7 @@ const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY!
 const EVOLUTION_INSTANCE = process.env.EVOLUTION_INSTANCE!
 
 function jidToPhone(jid: string, altJid?: string | null): string {
-  if (jid.includes('@lid') && altJid) {
-    return altJid.replace('@s.whatsapp.net', '')
-  }
+  if (jid.includes('@lid') && altJid) return altJid.replace('@s.whatsapp.net', '')
   return jid.replace('@s.whatsapp.net', '').replace('@lid', '').replace('@c.us', '')
 }
 
@@ -31,6 +30,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    // 1. Buscar chats da Evolution API
     const chatsRes = await fetch(
       `${EVOLUTION_API_URL}/chat/findChats/${EVOLUTION_INSTANCE}`,
       {
@@ -39,9 +39,7 @@ export async function GET(req: NextRequest) {
         body: JSON.stringify({}),
       }
     )
-
     if (!chatsRes.ok) throw new Error(`Evolution API ${chatsRes.status}`)
-
     const chats = (await chatsRes.json()) as Array<Record<string, unknown>>
 
     const contacts = chats
@@ -56,12 +54,6 @@ export async function GET(req: NextRequest) {
         const phone = jidToPhone(jid, altJid)
         const fromMe = (lastMsg?.key as Record<string, boolean>)?.fromMe ?? false
         const unreadCount = (c.unreadCount as number) || 0
-        const updatedAt = (c.updatedAt as string) || new Date().toISOString()
-
-        // funil: respondeu = última mensagem é deles (fromMe=false) ou têm não lidas
-        // sem_resposta = última mensagem foi nossa (fromMe=true)
-        const funil = (!fromMe || unreadCount > 0) ? 'respondeu' : 'sem_resposta'
-
         return {
           remoteJid: jid,
           phone,
@@ -69,14 +61,38 @@ export async function GET(req: NextRequest) {
           preview: extractPreview(lastMsg),
           unreadCount,
           fromMe,
-          ultima_mensagem: updatedAt,
-          funil,
+          ultima_mensagem: (c.updatedAt as string) || new Date().toISOString(),
+          // estágio padrão se não houver registro no Supabase
+          _defaultEstagio: (!fromMe || unreadCount > 0) ? 'em_conversa' : 'novo',
         }
       })
       .filter((c) => c.phone.length >= 8)
       .sort((a, b) => new Date(b.ultima_mensagem).getTime() - new Date(a.ultima_mensagem).getTime())
 
-    return NextResponse.json(contacts)
+    // 2. Enriquecer com dados CRM do Supabase
+    const phones = contacts.map((c) => c.phone)
+    const { data: crmRecords } = await getSupabase()
+      .from('inbox_contacts')
+      .select('phone, push_name, company_name, contact_name, estagio, icp_fit, proximo_followup, sentimento, notas')
+      .in('phone', phones)
+
+    const crmMap = new Map((crmRecords ?? []).map((r) => [r.phone, r]))
+
+    const result = contacts.map((c) => {
+      const crm = crmMap.get(c.phone)
+      return {
+        ...c,
+        company_name: crm?.company_name ?? null,
+        contact_name: crm?.contact_name ?? null,
+        estagio: crm?.estagio ?? c._defaultEstagio,
+        icp_fit: crm?.icp_fit ?? null,
+        proximo_followup: crm?.proximo_followup ?? null,
+        sentimento: crm?.sentimento ?? null,
+        has_crm: !!crm,
+      }
+    })
+
+    return NextResponse.json(result)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
     return NextResponse.json({ error: msg }, { status: 500 })
