@@ -28,6 +28,7 @@ type Lead = {
 type ConversationData = {
   messages: Message[]
   lead: Lead | null
+  phone: string
 }
 
 const fetcher = async (url: string) => {
@@ -76,7 +77,7 @@ export default function ConversationPage({
     const res = await fetch('/api/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone: decodedPhone, message }),
+      body: JSON.stringify({ phone: actualPhone, message }),
     })
 
     if (res.ok) {
@@ -89,6 +90,8 @@ export default function ConversationPage({
     setSending(false)
   }
 
+  // O número de telefone real (sem @s.whatsapp.net) vem da API
+  const actualPhone = data?.phone ?? decodedPhone.replace('@s.whatsapp.net', '').replace('@lid', '')
   const lead = data?.lead
   const messages = data?.messages ?? []
 
@@ -105,7 +108,7 @@ export default function ConversationPage({
             <h1 className="text-white font-medium">
               {lead?.nome_empresa ?? decodedPhone}
             </h1>
-            <p className="text-zinc-500 text-sm">{decodedPhone}</p>
+            <p className="text-zinc-500 text-sm">{actualPhone}</p>
           </div>
           {/* Info do lead */}
           {lead && (

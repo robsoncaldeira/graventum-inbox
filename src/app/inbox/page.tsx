@@ -6,14 +6,17 @@ import Sidebar from '@/components/Sidebar'
 import { MessageCircle, Building2, Clock } from 'lucide-react'
 
 type Conversation = {
+  remoteJid: string
   contact_phone: string
   ultima_mensagem: string
   preview: string
-  recebidas: number
+  unreadCount: number
+  pushName?: string
   nome_empresa?: string
   nome_contato?: string
   status_lead?: string
   segmento?: string
+  fromMe?: boolean
 }
 
 const fetcher = async (url: string) => {
@@ -85,15 +88,15 @@ export default function InboxPage() {
           <div className="space-y-2">
             {(data ?? []).map((conv) => (
               <Link
-                key={conv.contact_phone}
-                href={`/inbox/${encodeURIComponent(conv.contact_phone)}`}
+                key={conv.remoteJid}
+                href={`/inbox/${encodeURIComponent(conv.remoteJid)}`}
                 className="block bg-zinc-900 border border-zinc-800 rounded-xl p-4 hover:border-zinc-700 hover:bg-zinc-800/50 transition-all"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-white font-medium text-sm truncate">
-                        {conv.nome_empresa ?? conv.contact_phone}
+                        {conv.nome_empresa ?? conv.pushName ?? conv.contact_phone}
                       </span>
                       {conv.status_lead && (
                         <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${STATUS_COLORS[conv.status_lead] ?? 'bg-zinc-700 text-zinc-300'}`}>
@@ -111,9 +114,9 @@ export default function InboxPage() {
                       <Clock className="w-3 h-3" />
                       {timeAgo(conv.ultima_mensagem)}
                     </div>
-                    {conv.recebidas > 0 && (
+                    {conv.unreadCount > 0 && (
                       <span className="bg-violet-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center ml-auto">
-                        {conv.recebidas}
+                        {conv.unreadCount}
                       </span>
                     )}
                   </div>
