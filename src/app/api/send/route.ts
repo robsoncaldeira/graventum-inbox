@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { getSupabase } from '@/lib/supabase'
 import { sendWhatsAppMessage } from '@/lib/evolution'
 import { isAuthenticatedFromRequest } from '@/lib/auth'
+
+export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
   if (!isAuthenticatedFromRequest(req)) {
@@ -21,7 +23,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 502 })
   }
 
-  const { error } = await supabase.from('comercial_outreach_events').insert({
+  const { error } = await getSupabase().from('comercial_outreach_events').insert({
     contact_phone: phone,
     channel: 'whatsapp',
     direction: 'outbound',

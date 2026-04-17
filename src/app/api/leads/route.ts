@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { getSupabase } from '@/lib/supabase'
 import { isAuthenticatedFromRequest } from '@/lib/auth'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   if (!isAuthenticatedFromRequest(req)) {
     return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   }
 
+  const db = getSupabase()
+
   // Leads com WhatsApp
-  const { data: leads, error } = await supabase
+  const { data: leads, error } = await db
     .from('graventum_commercial_leads')
     .select('id, whatsapp, nome_empresa, nome_contato, status_lead, segmento, score_fit_graventum, cidade, estado')
     .not('whatsapp', 'is', null)
@@ -17,7 +21,7 @@ export async function GET(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   // Eventos inbound por phone
-  const { data: inboundEvents } = await supabase
+  const { data: inboundEvents } = await db
     .from('comercial_outreach_events')
     .select('contact_phone, ocorrido_em')
     .eq('channel', 'whatsapp')
@@ -32,7 +36,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Eventos outbound por phone
-  const { data: outboundEvents } = await supabase
+  const { data: outboundEvents } = await db
     .from('comercial_outreach_events')
     .select('contact_phone')
     .eq('channel', 'whatsapp')

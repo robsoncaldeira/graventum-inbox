@@ -1,17 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { getSupabase } from '@/lib/supabase'
 import { isAuthenticatedFromRequest } from '@/lib/auth'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   if (!isAuthenticatedFromRequest(req)) {
     return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   }
 
-  const { data, error } = await supabase.rpc('inbox_conversations')
+  const { data, error } = await getSupabase().rpc('inbox_conversations')
 
   if (error) {
     // Fallback: query manual se a função não existir
-    const { data: raw, error: rawErr } = await supabase
+    const { data: raw, error: rawErr } = await getSupabase()
       .from('comercial_outreach_events')
       .select(`
         contact_phone,
@@ -48,7 +50,7 @@ export async function GET(req: NextRequest) {
 
     // Buscar dados dos leads
     const phones = Array.from(map.keys())
-    const { data: leads } = await supabase
+    const { data: leads } = await getSupabase()
       .from('graventum_commercial_leads')
       .select('whatsapp, nome_empresa, nome_contato, status_lead, segmento')
       .in('whatsapp', phones)
