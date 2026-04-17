@@ -28,6 +28,20 @@ function jidToPhone(jid: string, altJid?: string | null): string {
   return jid.replace('@s.whatsapp.net', '').replace('@lid', '').replace('@c.us', '')
 }
 
+async function fetchRecords(jid: string): Promise<Array<Record<string, unknown>>> {
+  const res = await fetch(
+    `${EVOLUTION_API_URL}/chat/findMessages/${EVOLUTION_INSTANCE}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: EVOLUTION_API_KEY },
+      body: JSON.stringify({ where: { key: { remoteJid: jid } }, limit: 200 }),
+    }
+  )
+  if (!res.ok) return []
+  const data = await res.json()
+  return (data?.messages?.records ?? data?.records ?? []) as Array<Record<string, unknown>>
+}
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ phone: string }> }
@@ -37,46 +51,56 @@ export async function GET(
   }
 
   const { phone: phoneParam } = await params
-  // phone param pode ser um JID encodado (ex: 5541...@s.whatsapp.net) ou número puro
   const remoteJid = decodeURIComponent(phoneParam)
 
   try {
-    // 1. Buscar mensagens da Evolution API
-    const msgsRes = await fetch(
-      `${EVOLUTION_API_URL}/chat/findMessages/${EVOLUTION_INSTANCE}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', apikey: EVOLUTION_API_KEY },
-        body: JSON.stringify({
-          where: { key: { remoteJid } },
-          limit: 200,
-        }),
-      }
-    )
+    // 1. Buscar mensagens do JID principal
+    const primaryRecords = await fetchRecords(remoteJid)
 
-    if (!msgsRes.ok) throw new Error(`Evolution API ${msgsRes.status}`)
-
-    const msgsData = await msgsRes.json()
-    const records = (msgsData?.messages?.records ?? msgsData?.records ?? []) as Array<
-      Record<string, unknown>
-    >
-
-    // 2. Extrair número de telefone real para lookup do lead
-    // Para contatos @lid, remoteJidAlt pode não estar no primeiro registro — varrer todos
-    const altJid =
-      (records
-        .map((m) => (m.key as Record<string, string>)?.remoteJidAlt)
-        .find((v) => !!v) ?? null)
+    // 2. Extrair telefone real (remoteJidAlt para @lid)
+    const altJid = primaryRecords
+      .map((m) => (m.key as Record<string, string>)?.remoteJidAlt)
+      .find((v) => !!v) ?? null
     const phone = jidToPhone(remoteJid, altJid)
 
-    // 3. Transformar mensagens
-    const messages = records
+    // 3. Buscar JID alternativo no Supabase (remote_jid salvo pelo ContactPanel)
+    const { data: crmRecord } = await getSupabase()
+      .from('inbox_contacts')
+      .select('remote_jid')
+      .eq('phone', phone)
+      .maybeSingle()
+
+    // 4. Determinar JIDs alternativos para buscar:
+    //    - Se remoteJid é @lid e temos o telefone real → buscar {phone}@s.whatsapp.net
+    //    - Se remoteJid é @s.whatsapp.net → buscar remote_jid salvo (@lid se existir)
+    const altJids: string[] = []
+    if (remoteJid.includes('@lid') && phone) {
+      altJids.push(`${phone}@s.whatsapp.net`)
+    } else if (!remoteJid.includes('@lid') && crmRecord?.remote_jid) {
+      altJids.push(crmRecord.remote_jid)
+    }
+
+    // 5. Buscar mensagens dos JIDs alternativos em paralelo
+    const altRecordsArrays = await Promise.all(altJids.map(fetchRecords))
+    const allRecords = [...primaryRecords, ...altRecordsArrays.flat()]
+
+    // 6. Deduplicar por ID de mensagem
+    const seen = new Set<string>()
+    const dedupedRecords = allRecords.filter((m) => {
+      const id = (m.key as Record<string, unknown>)?.id as string
+      if (!id || seen.has(id)) return false
+      seen.add(id)
+      return true
+    })
+
+    // 7. Transformar e ordenar
+    const messages = dedupedRecords
       .map((m) => {
         const key = m.key as Record<string, unknown>
         const msgContent = (m.message ?? {}) as Record<string, unknown>
         const ts = m.messageTimestamp as number | null
         return {
-          id: m.id as string,
+          id: (key.id as string) ?? String(ts),
           direction: key.fromMe ? 'outbound' : ('inbound' as 'outbound' | 'inbound'),
           event_text: extractText(msgContent),
           ocorrido_em: ts
@@ -86,50 +110,22 @@ export async function GET(
           metadata: key.fromMe ? { sent_by: 'whatsapp' } : undefined,
         }
       })
-      .sort(
-        (a, b) =>
-          new Date(a.ocorrido_em).getTime() - new Date(b.ocorrido_em).getTime()
-      )
+      .sort((a, b) => new Date(a.ocorrido_em).getTime() - new Date(b.ocorrido_em).getTime())
 
-    // 4. Registrar last_read_at no Supabase (fonte de verdade para badge de não lido)
+    // 8. Registrar last_read_at (fire-and-forget)
     getSupabase()
       .from('inbox_contacts')
       .upsert({ phone, last_read_at: new Date().toISOString() }, { onConflict: 'phone' })
-      .then(() => {/* fire-and-forget */})
+      .then(() => {})
 
-    // 5. Tentar marcar como lida na Evolution API também (best-effort)
-    const inboundMessages = records.filter(
-      (m) => !(m.key as Record<string, unknown>)?.fromMe
-    )
-    if (inboundMessages.length > 0) {
-      const readMessages = inboundMessages.map((m) => {
-        const key = m.key as Record<string, unknown>
-        return { remoteJid, fromMe: false, id: key.id as string }
-      })
-      fetch(
-        `${EVOLUTION_API_URL}/chat/markChatAsRead/${EVOLUTION_INSTANCE}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', apikey: EVOLUTION_API_KEY },
-          body: JSON.stringify({ readMessages }),
-        }
-      ).catch(() => {/* ignora erro */})
-    }
-
-    // 5. Buscar dados do lead no Supabase
+    // 9. Buscar dados do lead no Supabase
     const { data: leadData } = await getSupabase()
       .from('graventum_commercial_leads')
-      .select(
-        'company_name, status_lead, segmento, score_fit_graventum, cidade, estado'
-      )
+      .select('company_name, status_lead, segmento, score_fit_graventum, cidade, estado')
       .eq('whatsapp', phone)
       .maybeSingle()
 
-    return NextResponse.json({
-      messages,
-      lead: leadData,
-      phone,
-    })
+    return NextResponse.json({ messages, lead: leadData, phone })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
