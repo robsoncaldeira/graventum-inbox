@@ -3,7 +3,6 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { MessageCircle, Users, LogOut } from 'lucide-react'
-import { clsx } from 'clsx'
 
 const NAV = [
   { href: '/inbox', label: 'Conversas', icon: MessageCircle },
