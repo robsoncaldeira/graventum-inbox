@@ -92,6 +92,7 @@ export default function LeadsPage() {
   const [activeTab, setActiveTab] = useState('all')
   const [search, setSearch] = useState('')
   const [dateFilter, setDateFilter] = useState('all')
+  const [customDays, setCustomDays] = useState('2')
 
   // useLayoutEffect: roda antes do paint, sem flash de "Todos"
   useLayoutEffect(() => {
@@ -164,9 +165,13 @@ export default function LeadsPage() {
 
   const dateThreshold = (() => {
     const now = Date.now()
-    if (dateFilter === '1d')  return now - 1  * 24 * 3600000
-    if (dateFilter === '7d')  return now - 7  * 24 * 3600000
-    if (dateFilter === '30d') return now - 30 * 24 * 3600000
+    if (dateFilter === '1d')     return now - 1  * 24 * 3600000
+    if (dateFilter === '7d')     return now - 7  * 24 * 3600000
+    if (dateFilter === '30d')    return now - 30 * 24 * 3600000
+    if (dateFilter === 'custom') {
+      const days = parseFloat(customDays)
+      if (!isNaN(days) && days > 0) return now - days * 24 * 3600000
+    }
     return null
   })()
 
@@ -244,18 +249,35 @@ export default function LeadsPage() {
                 </button>
               )}
             </div>
-            <select
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className={`bg-zinc-900 border rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-violet-500 shrink-0 ${
-                dateFilter !== 'all' ? 'border-violet-600 text-violet-300' : 'border-zinc-800 text-zinc-400'
-              }`}
-            >
-              <option value="all">Todos os períodos</option>
-              <option value="1d">Últimas 24h</option>
-              <option value="7d">Últimos 7 dias</option>
-              <option value="30d">Últimos 30 dias</option>
-            </select>
+            <div className="flex gap-1 shrink-0">
+              <select
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                className={`bg-zinc-900 border rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-violet-500 ${
+                  dateFilter !== 'all' ? 'border-violet-600 text-violet-300' : 'border-zinc-800 text-zinc-400'
+                }`}
+              >
+                <option value="all">Todos os períodos</option>
+                <option value="1d">Últimas 24h</option>
+                <option value="7d">Últimos 7 dias</option>
+                <option value="30d">Últimos 30 dias</option>
+                <option value="custom">Personalizado</option>
+              </select>
+              {dateFilter === 'custom' && (
+                <div className="flex items-center gap-1 bg-zinc-900 border border-violet-600 rounded-lg px-2">
+                  <span className="text-zinc-500 text-xs">últimos</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="365"
+                    value={customDays}
+                    onChange={(e) => setCustomDays(e.target.value)}
+                    className="w-10 bg-transparent text-violet-300 text-xs text-center focus:outline-none"
+                  />
+                  <span className="text-zinc-500 text-xs">dias</span>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Tabs */}
