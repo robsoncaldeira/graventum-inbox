@@ -92,26 +92,20 @@ export async function GET(
       )
 
     // 4. Marcar conversa como lida na Evolution API (fire-and-forget)
-    const lastInbound = [...records].reverse().find(
+    const inboundMessages = records.filter(
       (m) => !(m.key as Record<string, unknown>)?.fromMe
     )
-    if (lastInbound) {
-      const key = lastInbound.key as Record<string, unknown>
+    if (inboundMessages.length > 0) {
+      const readMessages = inboundMessages.map((m) => {
+        const key = m.key as Record<string, unknown>
+        return { remoteJid, fromMe: false, id: key.id as string }
+      })
       fetch(
         `${EVOLUTION_API_URL}/chat/markChatAsRead/${EVOLUTION_INSTANCE}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', apikey: EVOLUTION_API_KEY },
-          body: JSON.stringify({
-            lastMessage: {
-              key: {
-                remoteJid,
-                fromMe: false,
-                id: key.id,
-              },
-            },
-            read: true,
-          }),
+          body: JSON.stringify({ readMessages }),
         }
       ).catch(() => {/* ignora erro — não bloqueia a resposta */})
     }

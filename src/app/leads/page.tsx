@@ -103,9 +103,17 @@ export default function LeadsPage() {
     sessionStorage.setItem('leads_tab', tab)
   }
 
-  const { data, isLoading, error } = useSWR<Contact[]>('/api/leads', fetcher, {
+  const { data, isLoading, error, mutate } = useSWR<Contact[]>('/api/leads', fetcher, {
     refreshInterval: 60000,
+    revalidateOnFocus: true,
   })
+
+  function markAsRead(remoteJid: string) {
+    mutate(
+      (prev) => prev?.map((c) => c.remoteJid === remoteJid ? { ...c, unreadCount: 0 } : c),
+      { revalidate: false }
+    )
+  }
 
   if (error) return (
     <div className="flex min-h-screen bg-zinc-950">
@@ -355,6 +363,7 @@ export default function LeadsPage() {
 
                     <Link
                       href={`/inbox/${encodeURIComponent(contact.remoteJid)}?phone=${encodeURIComponent(contact.phone)}`}
+                      onClick={() => markAsRead(contact.remoteJid)}
                       className="flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs px-3 py-2 rounded-lg transition-colors"
                     >
                       <MessageCircle className="w-3.5 h-3.5" />
