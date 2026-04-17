@@ -120,8 +120,9 @@ export default function LeadsPage() {
 
   // Métricas
   const totalProspected = all.length
-  const totalResponded  = all.filter((c) => !c.fromMe || c.unreadCount > 0).length  // bots + humanos que responderam
-  const humanResponded  = humans.filter((c) => !c.fromMe || c.unreadCount > 0).length  // só humanos que responderam
+  const humanResponded  = humans.filter((c) => !c.fromMe || c.unreadCount > 0).length  // humanos com atividade WA atual
+  // Responderam confirmados = bots classificados (responderam e foram identificados) + humanos com atividade atual
+  const totalResponded  = bots.length + humanResponded
   const humanRate       = totalProspected > 0 ? Math.round((humanResponded / totalProspected) * 100) : 0
   const meetings        = humans.filter((c) => c.estagio === 'reuniao_marcada').length
   const wins            = humans.filter((c) => c.estagio === 'ganho').length
