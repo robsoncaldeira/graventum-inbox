@@ -343,6 +343,7 @@ export default function ConversationPage({
         {panelOpen && (
           <ContactPanel
             phone={actualPhone}
+            remoteJid={decodedPhone}
             initialData={contactData ?? null}
             onClose={() => setPanelOpen(false)}
           />

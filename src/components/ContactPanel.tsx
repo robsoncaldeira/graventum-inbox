@@ -95,10 +95,12 @@ function Select({ value, onChange, options }: {
 
 export default function ContactPanel({
   phone,
+  remoteJid,
   initialData,
   onClose,
 }: {
   phone: string
+  remoteJid?: string
   initialData: ContactData | null
   onClose: () => void
 }) {
@@ -138,6 +140,9 @@ export default function ContactPanel({
     if (payload.objecao === '') payload.objecao = null
     if (payload.notas === '') payload.notas = null
     if (payload.motivo_perda === '') payload.motivo_perda = null
+
+    // Salva remote_jid para permitir lookup reverso (contatos @lid)
+    if (remoteJid) payload.remote_jid = remoteJid
 
     await fetch(`/api/contacts/${encodeURIComponent(phone)}`, {
       method: 'PATCH',

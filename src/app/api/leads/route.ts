@@ -73,13 +73,25 @@ export async function GET(req: NextRequest) {
     const phones = contacts.map((c) => c.phone)
     const { data: crmRecords } = await getSupabase()
       .from('inbox_contacts')
-      .select('phone, push_name, company_name, contact_name, estagio, icp_fit, proximo_followup, sentimento, notas, is_bot')
+      .select('phone, remote_jid, push_name, company_name, contact_name, estagio, icp_fit, proximo_followup, sentimento, notas, is_bot')
       .in('phone', phones)
 
-    const crmMap = new Map((crmRecords ?? []).map((r) => [r.phone, r]))
+    // Mapa primário por phone (real) + secundário por remote_jid stripped (para @lid)
+    const crmByPhone = new Map((crmRecords ?? []).map((r) => [r.phone, r]))
+    const crmByJid = new Map(
+      (crmRecords ?? [])
+        .filter((r) => r.remote_jid)
+        .map((r) => [
+          (r.remote_jid as string)
+            .replace('@s.whatsapp.net', '')
+            .replace('@lid', '')
+            .replace('@c.us', ''),
+          r,
+        ])
+    )
 
     const result = contacts.map((c) => {
-      const crm = crmMap.get(c.phone)
+      const crm = crmByPhone.get(c.phone) ?? crmByJid.get(c.phone)
       return {
         ...c,
         company_name: crm?.company_name ?? null,
