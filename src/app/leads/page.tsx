@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useLayoutEffect } from 'react'
 import useSWR, { mutate as globalMutate } from 'swr'
 import Link from 'next/link'
 import Sidebar from '@/components/Sidebar'
@@ -90,8 +90,8 @@ async function toggleBot(phone: string, isBot: boolean) {
 export default function LeadsPage() {
   const [activeTab, setActiveTab] = useState('all')
 
-  // Restaura tab ao montar (persiste entre navegações)
-  useEffect(() => {
+  // useLayoutEffect: roda antes do paint, sem flash de "Todos"
+  useLayoutEffect(() => {
     const saved = sessionStorage.getItem('leads_tab')
     if (saved) setActiveTab(saved)
   }, [])
