@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback } from 'react'
 import useSWR, { mutate as globalMutate } from 'swr'
 import Link from 'next/link'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import { MessageCircle, Users, TrendingUp, Calendar, Trophy, XCircle, Ghost, Sprout, Bot } from 'lucide-react'
 
@@ -88,7 +89,14 @@ async function toggleBot(phone: string, isBot: boolean) {
 }
 
 export default function LeadsPage() {
-  const [activeTab, setActiveTab] = useState('all')
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const activeTab = searchParams.get('tab') ?? 'all'
+
+  const setActiveTab = useCallback((tab: string) => {
+    router.replace(`/leads?tab=${tab}`, { scroll: false })
+  }, [router])
+
   const { data, isLoading, error } = useSWR<Contact[]>('/api/leads', fetcher, {
     refreshInterval: 60000,
   })
