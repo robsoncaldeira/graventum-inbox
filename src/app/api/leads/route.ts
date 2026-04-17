@@ -73,7 +73,7 @@ export async function GET(req: NextRequest) {
     const phones = contacts.map((c) => c.phone)
     const { data: crmRecords } = await getSupabase()
       .from('inbox_contacts')
-      .select('phone, push_name, company_name, contact_name, estagio, icp_fit, proximo_followup, sentimento, notas')
+      .select('phone, push_name, company_name, contact_name, estagio, icp_fit, proximo_followup, sentimento, notas, is_bot')
       .in('phone', phones)
 
     const crmMap = new Map((crmRecords ?? []).map((r) => [r.phone, r]))
@@ -88,6 +88,7 @@ export async function GET(req: NextRequest) {
         icp_fit: crm?.icp_fit ?? null,
         proximo_followup: crm?.proximo_followup ?? null,
         sentimento: crm?.sentimento ?? null,
+        is_bot: crm?.is_bot ?? false,
         has_crm: !!crm,
       }
     })

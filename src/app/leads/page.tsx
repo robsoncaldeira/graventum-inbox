@@ -1,10 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import useSWR from 'swr'
+import useSWR, { mutate as globalMutate } from 'swr'
 import Link from 'next/link'
 import Sidebar from '@/components/Sidebar'
-import { MessageCircle, Users, TrendingUp, Calendar, Trophy, XCircle, Ghost, Sprout } from 'lucide-react'
+import { MessageCircle, Users, TrendingUp, Calendar, Trophy, XCircle, Ghost, Sprout, Bot } from 'lucide-react'
 
 type Contact = {
   remoteJid: string
@@ -20,25 +20,22 @@ type Contact = {
   icp_fit?: 'alto' | 'medio' | 'baixo' | null
   proximo_followup?: string | null
   sentimento?: 'positivo' | 'objecao' | 'neutro' | null
+  is_bot: boolean
   has_crm: boolean
 }
 
 const ESTAGIOS: Record<string, { label: string; color: string; bg: string }> = {
-  novo:            { label: 'Novo',           color: 'text-zinc-400',   bg: 'bg-zinc-700' },
-  em_conversa:     { label: 'Em conversa',    color: 'text-blue-400',   bg: 'bg-blue-500/20' },
-  qualificado:     { label: 'Qualificado',    color: 'text-green-400',  bg: 'bg-green-500/20' },
-  nutricao:        { label: 'Nutrição',       color: 'text-orange-400', bg: 'bg-orange-500/20' },
-  reuniao_marcada: { label: 'Reunião',        color: 'text-violet-400', bg: 'bg-violet-500/20' },
-  ghosting:        { label: 'Ghosting',       color: 'text-zinc-500',   bg: 'bg-zinc-800' },
-  ganho:           { label: 'Ganho',          color: 'text-emerald-400',bg: 'bg-emerald-500/20' },
-  perdido:         { label: 'Perdido',        color: 'text-red-400',    bg: 'bg-red-500/20' },
+  novo:            { label: 'Novo',           color: 'text-zinc-400',    bg: 'bg-zinc-700' },
+  em_conversa:     { label: 'Em conversa',    color: 'text-blue-400',    bg: 'bg-blue-500/20' },
+  qualificado:     { label: 'Qualificado',    color: 'text-green-400',   bg: 'bg-green-500/20' },
+  nutricao:        { label: 'Nutrição',       color: 'text-orange-400',  bg: 'bg-orange-500/20' },
+  reuniao_marcada: { label: 'Reunião',        color: 'text-violet-400',  bg: 'bg-violet-500/20' },
+  ghosting:        { label: 'Ghosting',       color: 'text-zinc-500',    bg: 'bg-zinc-800' },
+  ganho:           { label: 'Ganho',          color: 'text-emerald-400', bg: 'bg-emerald-500/20' },
+  perdido:         { label: 'Perdido',        color: 'text-red-400',     bg: 'bg-red-500/20' },
 }
 
-const ICP_FIT: Record<string, string> = {
-  alto:  '🟢',
-  medio: '🟡',
-  baixo: '🔴',
-}
+const ICP_FIT: Record<string, string> = { alto: '🟢', medio: '🟡', baixo: '🔴' }
 
 const SENTIMENTO_BADGE: Record<string, { label: string; color: string }> = {
   positivo: { label: '↑ positivo', color: 'text-green-400' },
@@ -47,14 +44,15 @@ const SENTIMENTO_BADGE: Record<string, { label: string; color: string }> = {
 }
 
 const TABS = [
-  { key: 'all',            label: 'Todos',       icon: Users },
-  { key: 'em_conversa',    label: 'Em conversa', icon: MessageCircle },
-  { key: 'qualificado',    label: 'Qualificados',icon: TrendingUp },
-  { key: 'nutricao',       label: 'Nutrição',    icon: Sprout },
-  { key: 'reuniao_marcada',label: 'Reunião',     icon: Calendar },
-  { key: 'ghosting',       label: 'Ghosting',    icon: Ghost },
-  { key: 'ganho',          label: 'Ganhos',      icon: Trophy },
-  { key: 'perdido',        label: 'Perdidos',    icon: XCircle },
+  { key: 'all',            label: 'Todos',       icon: Users,          botFilter: false },
+  { key: 'em_conversa',    label: 'Em conversa', icon: MessageCircle,  botFilter: false },
+  { key: 'qualificado',    label: 'Qualificados',icon: TrendingUp,     botFilter: false },
+  { key: 'nutricao',       label: 'Nutrição',    icon: Sprout,         botFilter: false },
+  { key: 'reuniao_marcada',label: 'Reunião',     icon: Calendar,       botFilter: false },
+  { key: 'ghosting',       label: 'Ghosting',    icon: Ghost,          botFilter: false },
+  { key: 'ganho',          label: 'Ganhos',      icon: Trophy,         botFilter: false },
+  { key: 'perdido',        label: 'Perdidos',    icon: XCircle,        botFilter: false },
+  { key: 'bot',            label: 'Bots',        icon: Bot,            botFilter: true  },
 ]
 
 const fetcher = async (url: string) => {
@@ -80,6 +78,15 @@ function formatFollowup(dateStr: string) {
   return { label: d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }), color: 'text-zinc-400' }
 }
 
+async function toggleBot(phone: string, isBot: boolean) {
+  await fetch(`/api/contacts/${encodeURIComponent(phone)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ is_bot: isBot }),
+  })
+  globalMutate('/api/leads')
+}
+
 export default function LeadsPage() {
   const [activeTab, setActiveTab] = useState('all')
   const { data, isLoading, error } = useSWR<Contact[]>('/api/leads', fetcher, {
@@ -96,16 +103,29 @@ export default function LeadsPage() {
   )
 
   const all = data ?? []
-  const filtered = activeTab === 'all' ? all : all.filter((c) => c.estagio === activeTab)
+  const humans = all.filter((c) => !c.is_bot)
+  const bots   = all.filter((c) => c.is_bot)
 
-  const totalResponded = all.filter((c) => !c.fromMe || c.unreadCount > 0).length
-  const responseRate = all.length > 0 ? Math.round((totalResponded / all.length) * 100) : 0
-  const meetings = all.filter((c) => c.estagio === 'reuniao_marcada').length
-  const wins = all.filter((c) => c.estagio === 'ganho').length
-  const qualified = all.filter((c) => c.estagio === 'qualificado').length
+  // Métricas sobre humanos (bots excluídos)
+  const humanResponded  = humans.filter((c) => !c.fromMe || c.unreadCount > 0).length
+  const humanTotal      = humans.length
+  const humanRate       = humanTotal > 0 ? Math.round((humanResponded / humanTotal) * 100) : 0
+  const meetings        = humans.filter((c) => c.estagio === 'reuniao_marcada').length
+  const wins            = humans.filter((c) => c.estagio === 'ganho').length
+  const qualified       = humans.filter((c) => c.estagio === 'qualificado').length
 
-  const countFor = (key: string) =>
-    key === 'all' ? all.length : all.filter((c) => c.estagio === key).length
+  // Contagem por tab (bots excluídos de todas as tabs exceto 'bot')
+  const countFor = (key: string) => {
+    if (key === 'all') return humans.length
+    if (key === 'bot') return bots.length
+    return humans.filter((c) => c.estagio === key).length
+  }
+
+  const filtered = (() => {
+    if (activeTab === 'all') return humans
+    if (activeTab === 'bot') return bots
+    return humans.filter((c) => c.estagio === activeTab)
+  })()
 
   return (
     <div className="flex min-h-screen bg-zinc-950">
@@ -115,20 +135,36 @@ export default function LeadsPage() {
 
           {/* Header com métricas */}
           <div className="mb-6">
-            <h1 className="text-white text-lg font-semibold mb-4">Funil de Contatos</h1>
+            <div className="flex items-center justify-between mb-4">
+              <h1 className="text-white text-lg font-semibold">Funil de Contatos</h1>
+              {bots.length > 0 && (
+                <span className="text-xs text-zinc-500 flex items-center gap-1.5">
+                  <Bot className="w-3.5 h-3.5" />
+                  {bots.length} bot{bots.length > 1 ? 's' : ''} filtrado{bots.length > 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
             <div className="grid grid-cols-4 gap-3">
-              {[
-                { label: 'Total',           value: all.length,     sub: 'contatos WA' },
-                { label: 'Taxa de resposta',value: `${responseRate}%`, sub: `${totalResponded} responderam` },
-                { label: 'Qualificados',    value: qualified,      sub: 'com fit confirmado' },
-                { label: 'Reuniões',        value: meetings,       sub: `${wins} ganhos` },
-              ].map(({ label, value, sub }) => (
-                <div key={label} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                  <p className="text-zinc-500 text-xs mb-1">{label}</p>
-                  <p className="text-white text-xl font-semibold">{value}</p>
-                  <p className="text-zinc-600 text-xs mt-0.5">{sub}</p>
-                </div>
-              ))}
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+                <p className="text-zinc-500 text-xs mb-1">Total humanos</p>
+                <p className="text-white text-xl font-semibold">{humanTotal}</p>
+                <p className="text-zinc-600 text-xs mt-0.5">de {all.length} contatos</p>
+              </div>
+              <div className="bg-zinc-900 border border-violet-800/60 rounded-xl p-4">
+                <p className="text-zinc-500 text-xs mb-1">Taxa resp. humana</p>
+                <p className="text-violet-400 text-xl font-semibold">{humanRate}%</p>
+                <p className="text-zinc-600 text-xs mt-0.5">{humanResponded} de {humanTotal} responderam</p>
+              </div>
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+                <p className="text-zinc-500 text-xs mb-1">Qualificados</p>
+                <p className="text-white text-xl font-semibold">{qualified}</p>
+                <p className="text-zinc-600 text-xs mt-0.5">com fit confirmado</p>
+              </div>
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+                <p className="text-zinc-500 text-xs mb-1">Reuniões</p>
+                <p className="text-white text-xl font-semibold">{meetings}</p>
+                <p className="text-zinc-600 text-xs mt-0.5">{wins} ganhos</p>
+              </div>
             </div>
           </div>
 
@@ -136,14 +172,15 @@ export default function LeadsPage() {
           <div className="flex gap-1 mb-5 flex-wrap">
             {TABS.map(({ key, label, icon: Icon }) => {
               const count = countFor(key)
+              const isBot = key === 'bot'
               return (
                 <button
                   key={key}
                   onClick={() => setActiveTab(key)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors ${
                     activeTab === key
-                      ? 'bg-zinc-800 text-white'
-                      : 'text-zinc-500 hover:text-zinc-300'
+                      ? isBot ? 'bg-zinc-800 text-orange-400' : 'bg-zinc-800 text-white'
+                      : isBot ? 'text-orange-500/60 hover:text-orange-400' : 'text-zinc-500 hover:text-zinc-300'
                   }`}
                 >
                   <Icon className="w-3.5 h-3.5" />
@@ -177,10 +214,11 @@ export default function LeadsPage() {
               return (
                 <div
                   key={contact.remoteJid}
-                  className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex items-center gap-4 hover:border-zinc-700 transition-colors"
+                  className={`bg-zinc-900 border rounded-xl p-4 flex items-center gap-4 hover:border-zinc-700 transition-colors ${
+                    contact.is_bot ? 'border-orange-900/40 opacity-70' : 'border-zinc-800'
+                  }`}
                 >
                   <div className="flex-1 min-w-0">
-                    {/* Linha 1: nome + badges */}
                     <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                       <span className="text-white font-medium text-sm truncate">
                         {contact.company_name ?? contact.pushName ?? contact.phone}
@@ -188,33 +226,33 @@ export default function LeadsPage() {
                       {contact.contact_name && (
                         <span className="text-zinc-500 text-xs">{contact.contact_name}</span>
                       )}
-                      {/* Estágio badge */}
-                      <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${estagio.bg} ${estagio.color}`}>
-                        {estagio.label}
-                      </span>
-                      {/* ICP fit */}
-                      {contact.icp_fit && (
-                        <span className="text-xs shrink-0" title={`ICP: ${contact.icp_fit}`}>
-                          {ICP_FIT[contact.icp_fit]}
+                      {contact.is_bot ? (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-400 flex items-center gap-1">
+                          <Bot className="w-2.5 h-2.5" /> bot
+                        </span>
+                      ) : (
+                        <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${estagio.bg} ${estagio.color}`}>
+                          {estagio.label}
                         </span>
                       )}
-                      {/* Mensagens não lidas */}
+                      {contact.icp_fit && !contact.is_bot && (
+                        <span className="text-xs shrink-0">{ICP_FIT[contact.icp_fit]}</span>
+                      )}
                       {contact.unreadCount > 0 && (
                         <span className="bg-violet-600 text-white text-xs rounded-full px-1.5 py-0.5 shrink-0">
                           {contact.unreadCount}
                         </span>
                       )}
                     </div>
-                    {/* Linha 2: preview + meta */}
                     <div className="flex items-center gap-3 text-xs text-zinc-600">
                       <span>{contact.phone}</span>
                       <span>{timeAgo(contact.ultima_mensagem)}</span>
-                      {contact.sentimento && (
+                      {contact.sentimento && !contact.is_bot && (
                         <span className={SENTIMENTO_BADGE[contact.sentimento]?.color}>
                           {SENTIMENTO_BADGE[contact.sentimento]?.label}
                         </span>
                       )}
-                      {followup && (
+                      {followup && !contact.is_bot && (
                         <span className={`flex items-center gap-1 ${followup.color}`}>
                           <Calendar className="w-3 h-3" />
                           follow-up {followup.label}
@@ -226,13 +264,28 @@ export default function LeadsPage() {
                     </div>
                   </div>
 
-                  <Link
-                    href={`/inbox/${encodeURIComponent(contact.remoteJid)}?phone=${encodeURIComponent(contact.phone)}`}
-                    className="shrink-0 flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs px-3 py-2 rounded-lg transition-colors"
-                  >
-                    <MessageCircle className="w-3.5 h-3.5" />
-                    Ver conversa
-                  </Link>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {/* Botão marcar/desmarcar bot */}
+                    <button
+                      onClick={() => toggleBot(contact.phone, !contact.is_bot)}
+                      title={contact.is_bot ? 'Desmarcar como bot' : 'Marcar como bot'}
+                      className={`p-1.5 rounded-lg transition-colors ${
+                        contact.is_bot
+                          ? 'bg-orange-500/20 text-orange-400 hover:bg-orange-500/30'
+                          : 'text-zinc-600 hover:text-orange-400 hover:bg-zinc-800'
+                      }`}
+                    >
+                      <Bot className="w-3.5 h-3.5" />
+                    </button>
+
+                    <Link
+                      href={`/inbox/${encodeURIComponent(contact.remoteJid)}?phone=${encodeURIComponent(contact.phone)}`}
+                      className="flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs px-3 py-2 rounded-lg transition-colors"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      Ver conversa
+                    </Link>
+                  </div>
                 </div>
               )
             })}
