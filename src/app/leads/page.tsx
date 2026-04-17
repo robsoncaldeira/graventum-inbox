@@ -270,12 +270,6 @@ export default function LeadsPage() {
                           {SENTIMENTO_BADGE[contact.sentimento]?.label}
                         </span>
                       )}
-                      {followup && !contact.is_bot && (
-                        <span className={`flex items-center gap-1 ${followup.color}`}>
-                          <Calendar className="w-3 h-3" />
-                          follow-up {followup.label}
-                        </span>
-                      )}
                       {contact.preview && (
                         <span className="truncate max-w-[180px]">{contact.preview}</span>
                       )}
@@ -283,6 +277,30 @@ export default function LeadsPage() {
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
+                    {/* Follow-up badge */}
+                    {!contact.is_bot && (
+                      <Link
+                        href={`/inbox/${encodeURIComponent(contact.remoteJid)}?phone=${encodeURIComponent(contact.phone)}`}
+                        title={followup ? `Follow-up: ${followup.label}` : 'Definir follow-up'}
+                        className={`flex items-center gap-1.5 text-xs px-2.5 py-2 rounded-lg transition-colors ${
+                          followup
+                            ? `border ${
+                                followup.color === 'text-red-400'
+                                  ? 'border-red-800/60 bg-red-500/10 text-red-400'
+                                  : followup.color === 'text-yellow-400'
+                                  ? 'border-yellow-800/60 bg-yellow-500/10 text-yellow-400'
+                                  : followup.color === 'text-blue-400'
+                                  ? 'border-blue-800/60 bg-blue-500/10 text-blue-400'
+                                  : 'border-zinc-700 bg-zinc-800 text-zinc-400'
+                              }`
+                            : 'text-zinc-600 hover:text-zinc-400 hover:bg-zinc-800'
+                        }`}
+                      >
+                        <Calendar className="w-3.5 h-3.5 shrink-0" />
+                        {followup ? followup.label : <span className="text-zinc-700">—</span>}
+                      </Link>
+                    )}
+
                     {/* Botão marcar/desmarcar bot */}
                     <button
                       onClick={() => toggleBot(contact.phone, !contact.is_bot)}
