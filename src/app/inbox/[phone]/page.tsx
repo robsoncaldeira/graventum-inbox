@@ -96,6 +96,8 @@ export default function ConversationPage({
   const decodedPhone = decodeURIComponent(phone)
   const searchParams = useSearchParams()
   const phoneFromQuery = searchParams.get('phone')
+  const fromPage = searchParams.get('from') ?? 'inbox'
+  const backHref = fromPage === 'leads' ? '/leads' : '/inbox'
   const [message, setMessage] = useState('')
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState('')
@@ -329,7 +331,7 @@ export default function ConversationPage({
         <div className="flex-1 flex flex-col min-w-0">
           {/* Header */}
           <div className="border-b border-zinc-800 px-6 py-4 bg-zinc-900 flex items-center gap-4">
-            <Link href="/inbox" className="text-zinc-400 hover:text-white transition-colors">
+            <Link href={backHref} className="text-zinc-400 hover:text-white transition-colors">
               <ArrowLeft className="w-5 h-5" />
             </Link>
             <div className="flex-1 min-w-0">

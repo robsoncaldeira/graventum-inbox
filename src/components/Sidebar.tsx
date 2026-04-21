@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname, useSearchParams, useRouter } from 'next/navigation'
 import { MessageCircle, Users, LogOut } from 'lucide-react'
 
 const NAV = [
@@ -15,7 +15,9 @@ function clsxSimple(...classes: (string | boolean | undefined)[]) {
 
 export default function Sidebar() {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const router = useRouter()
+  const fromParam = searchParams.get('from')
 
   async function handleLogout() {
     await fetch('/api/logout', { method: 'POST' })
@@ -36,7 +38,11 @@ export default function Sidebar() {
 
       <nav className="flex-1 py-4 px-2 space-y-1">
         {NAV.map(({ href, label, icon: Icon }) => {
-          const active = pathname.startsWith(href)
+          // Se estamos em /inbox/[phone]?from=leads, destacar "Leads"
+          const isConversationFromLeads = pathname.startsWith('/inbox/') && fromParam === 'leads'
+          const active = isConversationFromLeads
+            ? href === '/leads'
+            : pathname.startsWith(href)
           return (
             <Link
               key={href}
