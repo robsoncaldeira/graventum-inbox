@@ -109,19 +109,40 @@ export async function GET(req: NextRequest) {
           new Date(b.ultima_mensagem).getTime() - new Date(a.ultima_mensagem).getTime()
       )
 
-    // 3. Enriquecer com dados de lead do Supabase
+    // 3. Enriquecer com dados de lead do Supabase + inbox_contacts
     const phones = conversations.map((c) => c.contact_phone)
-    const { data: leads } = await getSupabase()
-      .from('graventum_commercial_leads')
-      .select('whatsapp, company_name, status_lead, segmento')
-      .in('whatsapp', phones)
+    const remoteJids = conversations.map((c) => c.remoteJid)
+
+    const [{ data: leads }, { data: contactsByPhone }, { data: contactsByJid }] = await Promise.all([
+      getSupabase()
+        .from('graventum_commercial_leads')
+        .select('whatsapp, company_name, status_lead, segmento')
+        .in('whatsapp', phones),
+      getSupabase()
+        .from('inbox_contacts')
+        .select('phone, company_name, contact_name')
+        .in('phone', phones),
+      getSupabase()
+        .from('inbox_contacts')
+        .select('phone, remote_jid, company_name, contact_name')
+        .in('remote_jid', remoteJids),
+    ])
 
     const leadsMap = new Map((leads ?? []).map((l) => [l.whatsapp, l]))
+    const contactsByPhoneMap = new Map((contactsByPhone ?? []).map((c) => [c.phone, c]))
+    const contactsByJidMap = new Map((contactsByJid ?? []).map((c) => [c.remote_jid, c]))
 
-    const result = conversations.map((c) => ({
-      ...c,
-      ...(leadsMap.get(c.contact_phone) ?? {}),
-    }))
+    const result = conversations.map((c) => {
+      const lead = leadsMap.get(c.contact_phone)
+      const contact = contactsByPhoneMap.get(c.contact_phone) ?? contactsByJidMap.get(c.remoteJid)
+      return {
+        ...c,
+        company_name: lead?.company_name ?? contact?.company_name ?? null,
+        status_lead: lead?.status_lead ?? null,
+        segmento: lead?.segmento ?? null,
+        contact_name: contact?.contact_name ?? null,
+      }
+    })
 
     return NextResponse.json(result)
   } catch (err) {

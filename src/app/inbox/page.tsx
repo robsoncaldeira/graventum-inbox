@@ -15,6 +15,7 @@ type Conversation = {
   unreadCount: number
   pushName?: string
   company_name?: string
+  contact_name?: string
   status_lead?: string
   segmento?: string
   fromMe?: boolean
@@ -251,7 +252,7 @@ export default function InboxPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-white font-medium text-sm truncate">
-                        {conv.company_name ?? conv.pushName ?? conv.contact_phone}
+                        {conv.company_name ?? conv.contact_name ?? conv.pushName ?? conv.contact_phone}
                       </span>
                       {conv.status_lead && (
                         <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${STATUS_COLORS[conv.status_lead] ?? 'bg-zinc-700 text-zinc-300'}`}>
