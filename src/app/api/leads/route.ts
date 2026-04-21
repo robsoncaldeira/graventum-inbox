@@ -67,18 +67,38 @@ export async function GET(req: NextRequest) {
       })
       .filter((c) => c.phone.length >= 8)
 
+    // Resolver LIDs: buscar telefone real no inbox_contacts pelo remote_jid
+    const lids = raw.filter((c) => c.phone.length > 13 || !/^[1-9]\d{0,2}/.test(c.phone))
+    if (lids.length > 0) {
+      const lidJids = lids.map((c) => c.remoteJid)
+      const { data: lidLookups } = await getSupabase()
+        .from('inbox_contacts')
+        .select('phone, remote_jid')
+        .in('remote_jid', lidJids)
+      const lidMap = new Map((lidLookups ?? []).map((r) => [r.remote_jid, r.phone]))
+      for (const c of raw) {
+        if (c.phone.length > 13 || !/^[1-9]\d{0,2}/.test(c.phone)) {
+          const realPhone = lidMap.get(c.remoteJid)
+          if (realPhone && realPhone.length <= 13) {
+            c.phone = realPhone
+          }
+        }
+      }
+    }
+
+    // Filtrar contatos cujo phone ainda é um LID (não resolvido)
+    const resolved = raw.filter((c) => c.phone.length <= 13 && /^[1-9]/.test(c.phone))
+
     // Deduplicar por phone real — mesmo número pode aparecer como @s.whatsapp.net e @lid
     // Manter a entrada mais recente; preferir @lid (tem remoteJidAlt = telefone real)
-    const deduped = new Map<string, typeof raw[0]>()
-    for (const c of raw) {
+    const deduped = new Map<string, typeof resolved[0]>()
+    for (const c of resolved) {
       const existing = deduped.get(c.phone)
       if (!existing) {
         deduped.set(c.phone, c)
       } else {
-        // Manter o mais recente entre os dois
         const existingTs = new Date(existing.ultima_mensagem).getTime()
         const newTs = new Date(c.ultima_mensagem).getTime()
-        // Prefer @lid entry (has real phone via altJid) or the most recent one
         const preferNew = c.remoteJid.includes('@lid') || newTs > existingTs
         if (preferNew) deduped.set(c.phone, c)
       }

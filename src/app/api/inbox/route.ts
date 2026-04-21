@@ -70,9 +70,31 @@ export async function GET(req: NextRequest) {
       })
       .filter((c) => c.contact_phone.length >= 8)
 
+    // Resolver LIDs: buscar telefone real no inbox_contacts pelo remote_jid
+    const lids = raw.filter((c) => c.contact_phone.length > 13 || !/^[1-9]\d{0,2}/.test(c.contact_phone))
+    if (lids.length > 0) {
+      const lidJids = lids.map((c) => c.remoteJid)
+      const { data: lidLookups } = await getSupabase()
+        .from('inbox_contacts')
+        .select('phone, remote_jid')
+        .in('remote_jid', lidJids)
+      const lidMap = new Map((lidLookups ?? []).map((r) => [r.remote_jid, r.phone]))
+      for (const c of raw) {
+        if (c.contact_phone.length > 13 || !/^[1-9]\d{0,2}/.test(c.contact_phone)) {
+          const realPhone = lidMap.get(c.remoteJid)
+          if (realPhone && realPhone.length <= 13) {
+            c.contact_phone = realPhone
+          }
+        }
+      }
+    }
+
+    // Filtrar LIDs não resolvidos
+    const resolved = raw.filter((c) => c.contact_phone.length <= 13 && /^[1-9]/.test(c.contact_phone))
+
     // Deduplicar por phone — mesmo número pode aparecer como @s.whatsapp.net e @lid
-    const deduped = new Map<string, typeof raw[0]>()
-    for (const c of raw) {
+    const deduped = new Map<string, typeof resolved[0]>()
+    for (const c of resolved) {
       const existing = deduped.get(c.contact_phone)
       if (!existing) {
         deduped.set(c.contact_phone, c)
