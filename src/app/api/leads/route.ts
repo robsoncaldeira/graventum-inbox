@@ -86,13 +86,10 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Filtrar contatos cujo phone ainda é um LID (não resolvido)
-    const resolved = raw.filter((c) => c.phone.length <= 13 && /^[1-9]/.test(c.phone))
-
     // Deduplicar por phone real — mesmo número pode aparecer como @s.whatsapp.net e @lid
     // Manter a entrada mais recente; preferir @lid (tem remoteJidAlt = telefone real)
-    const deduped = new Map<string, typeof resolved[0]>()
-    for (const c of resolved) {
+    const deduped = new Map<string, typeof raw[0]>()
+    for (const c of raw) {
       const existing = deduped.get(c.phone)
       if (!existing) {
         deduped.set(c.phone, c)
