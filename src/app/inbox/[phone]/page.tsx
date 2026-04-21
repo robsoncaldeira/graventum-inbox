@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import ContactPanel from '@/components/ContactPanel'
-import { ArrowLeft, Send, Loader2, Paperclip, SlidersHorizontal, Bot } from 'lucide-react'
+import { ArrowLeft, Send, Loader2, Paperclip, SlidersHorizontal, Bot, Mic, Square, Trash2 } from 'lucide-react'
 
 type Message = {
   id: number
@@ -103,8 +103,125 @@ export default function ConversationPage({
   const [panelOpen, setPanelOpen] = useState(false)
   // Mensagens enviadas localmente — imunes a refreshes do SWR
   const [pendingMessages, setPendingMessages] = useState<Message[]>([])
+  const [recording, setRecording] = useState(false)
+  const [recordingTime, setRecordingTime] = useState(0)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+
+  function stopRecordingCleanup() {
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current)
+      recordingTimerRef.current = null
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop()
+    }
+    mediaRecorderRef.current = null
+    audioChunksRef.current = []
+    setRecording(false)
+    setRecordingTime(0)
+  }
+
+  async function startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mimeType = MediaRecorder.isTypeSupported('audio/ogg; codecs=opus')
+        ? 'audio/ogg; codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm; codecs=opus')
+        ? 'audio/webm; codecs=opus'
+        : 'audio/webm'
+      const recorder = new MediaRecorder(stream, { mimeType })
+      audioChunksRef.current = []
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data)
+      }
+
+      recorder.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop())
+      }
+
+      recorder.start()
+      mediaRecorderRef.current = recorder
+      setRecording(true)
+      setRecordingTime(0)
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingTime((t) => t + 1)
+      }, 1000)
+    } catch {
+      setSendError('Permissao de microfone negada')
+    }
+  }
+
+  function cancelRecording() {
+    stopRecordingCleanup()
+  }
+
+  async function sendRecording() {
+    if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') return
+
+    const recorder = mediaRecorderRef.current
+    return new Promise<void>((resolve) => {
+      const originalOnStop = recorder.onstop
+      recorder.onstop = async (ev) => {
+        if (originalOnStop) (originalOnStop as (ev: Event) => void)(ev)
+        if (recordingTimerRef.current) {
+          clearInterval(recordingTimerRef.current)
+          recordingTimerRef.current = null
+        }
+
+        const ext = recorder.mimeType.includes('ogg') ? 'ogg' : 'webm'
+        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType })
+        const audioFile = new File([blob], `audio.${ext}`, { type: recorder.mimeType })
+
+        setRecording(false)
+        setRecordingTime(0)
+        mediaRecorderRef.current = null
+        audioChunksRef.current = []
+
+        // Enviar via send-media
+        setSending(true)
+        setSendError('')
+        const pendingId = Date.now()
+        const optimisticMsg: Message = {
+          id: pendingId,
+          direction: 'outbound',
+          event_text: `[audio ${formatRecTime(recordingTime)}]`,
+          ocorrido_em: new Date().toISOString(),
+          event_type: 'media',
+          metadata: { sent_by: 'team_inbox' },
+        }
+        setPendingMessages((prev) => [...prev, optimisticMsg])
+
+        try {
+          const fd = new FormData()
+          fd.append('phone', actualPhone)
+          fd.append('file', audioFile)
+          const res = await fetch('/api/send-media', { method: 'POST', body: fd })
+          if (!res.ok) {
+            const err = await res.json()
+            setSendError(err.error ?? 'Erro ao enviar audio')
+            setPendingMessages((prev) => prev.filter((m) => m.id !== pendingId))
+          } else {
+            setTimeout(() => mutate(), 4000)
+          }
+        } finally {
+          setSending(false)
+        }
+        resolve()
+      }
+      recorder.stop()
+    })
+  }
+
+  function formatRecTime(secs: number) {
+    const m = Math.floor(secs / 60)
+    const s = secs % 60
+    return `${m}:${s.toString().padStart(2, '0')}`
+  }
 
   const { data, mutate, isLoading } = useSWR<ConversationData>(
     `/api/inbox/${encodeURIComponent(decodedPhone)}`,
@@ -297,45 +414,87 @@ export default function ConversationPage({
           {/* Input */}
           <div className="border-t border-zinc-800 bg-zinc-900 px-6 py-4">
             {sendError && <p className="text-red-400 text-xs mb-2">{sendError}</p>}
-            {file && (
+            {file && !recording && (
               <div className="flex items-center gap-2 mb-2 bg-zinc-800 rounded-lg px-3 py-2">
                 <Paperclip className="w-3.5 h-3.5 text-violet-400 shrink-0" />
                 <span className="text-zinc-300 text-xs truncate flex-1">{file.name}</span>
                 <button type="button" onClick={() => setFile(null)} className="text-zinc-500 hover:text-white text-xs ml-2 shrink-0">✕</button>
               </div>
             )}
-            <form onSubmit={handleSend} className="flex gap-2">
-              <input
-                ref={fileInputRef}
-                type="file"
-                className="hidden"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white rounded-xl px-3 py-2.5 transition-colors shrink-0"
-                title="Anexar arquivo"
-              >
-                <Paperclip className="w-4 h-4" />
-              </button>
-              <input
-                type="text"
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                placeholder={file ? 'Legenda (opcional)...' : 'Digite sua mensagem...'}
-                className="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-white placeholder-zinc-500 text-sm focus:outline-none focus:border-violet-500"
-                disabled={sending}
-              />
-              <button
-                type="submit"
-                disabled={(!message.trim() && !file) || sending || isLoading}
-                className="bg-violet-600 hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl px-4 py-2.5 transition-colors flex items-center gap-2 text-sm shrink-0"
-              >
-                {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-              </button>
-            </form>
+
+            {recording ? (
+              /* Modo gravacao */
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={cancelRecording}
+                  className="bg-zinc-800 hover:bg-zinc-700 text-red-400 hover:text-red-300 rounded-xl px-3 py-2.5 transition-colors shrink-0"
+                  title="Cancelar gravacao"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+                <div className="flex-1 flex items-center gap-3 bg-zinc-800 border border-red-500/40 rounded-xl px-4 py-2.5">
+                  <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse shrink-0" />
+                  <span className="text-red-400 text-sm font-mono">{formatRecTime(recordingTime)}</span>
+                  <span className="text-zinc-500 text-xs">Gravando audio...</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={sendRecording}
+                  disabled={sending}
+                  className="bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white rounded-xl px-4 py-2.5 transition-colors flex items-center gap-2 text-sm shrink-0"
+                  title="Enviar audio"
+                >
+                  {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                </button>
+              </div>
+            ) : (
+              /* Modo normal */
+              <form onSubmit={handleSend} className="flex gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                  accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white rounded-xl px-3 py-2.5 transition-colors shrink-0"
+                  title="Anexar arquivo"
+                >
+                  <Paperclip className="w-4 h-4" />
+                </button>
+                <input
+                  type="text"
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  placeholder={file ? 'Legenda (opcional)...' : 'Digite sua mensagem...'}
+                  className="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-white placeholder-zinc-500 text-sm focus:outline-none focus:border-violet-500"
+                  disabled={sending}
+                />
+                {message.trim() || file ? (
+                  <button
+                    type="submit"
+                    disabled={(!message.trim() && !file) || sending || isLoading}
+                    className="bg-violet-600 hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl px-4 py-2.5 transition-colors flex items-center gap-2 text-sm shrink-0"
+                  >
+                    {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={startRecording}
+                    disabled={sending || isLoading}
+                    className="bg-zinc-800 hover:bg-violet-600 disabled:opacity-40 text-zinc-400 hover:text-white rounded-xl px-4 py-2.5 transition-colors flex items-center gap-2 text-sm shrink-0"
+                    title="Gravar audio"
+                  >
+                    <Mic className="w-4 h-4" />
+                  </button>
+                )}
+              </form>
+            )}
           </div>
         </div>
 
