@@ -202,8 +202,10 @@ export default function ConversationPage({
           fd.append('file', audioFile)
           const res = await fetch('/api/send-media', { method: 'POST', body: fd })
           if (!res.ok) {
-            const err = await res.json()
-            setSendError(err.error ?? 'Erro ao enviar audio')
+            const errText = await res.text()
+            let errMsg: string
+            try { errMsg = JSON.parse(errText).error ?? errText } catch { errMsg = errText }
+            setSendError(`Erro ${res.status}: ${errMsg}`)
             setPendingMessages((prev) => prev.filter((m) => m.id !== pendingId))
           } else {
             setTimeout(() => mutate(), 4000)

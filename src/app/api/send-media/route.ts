@@ -37,6 +37,11 @@ export async function POST(req: NextRequest) {
     const mediaType = getMediaType(file.name)
     const mimetype = file.type || 'application/octet-stream'
 
+    // Para audio sem extensão reconhecida, forçar mediatype audio
+    const effectiveMediaType = mimetype.startsWith('audio/') ? 'audio' : mediaType
+
+    console.log(`[send-media] phone=${phone} file=${file.name} size=${bytes.byteLength} mime=${mimetype} mediaType=${effectiveMediaType}`)
+
     const res = await fetch(
       `${EVOLUTION_API_URL}/message/sendMedia/${EVOLUTION_INSTANCE}`,
       {
@@ -44,7 +49,7 @@ export async function POST(req: NextRequest) {
         headers: { 'Content-Type': 'application/json', apikey: EVOLUTION_API_KEY },
         body: JSON.stringify({
           number: phone,
-          mediatype: mediaType,
+          mediatype: effectiveMediaType,
           mimetype,
           caption,
           media: base64,
@@ -54,13 +59,15 @@ export async function POST(req: NextRequest) {
     )
 
     if (!res.ok) {
-      const err = await res.json()
-      return NextResponse.json({ error: JSON.stringify(err) }, { status: 502 })
+      const errBody = await res.text()
+      console.error(`[send-media] Evolution API error: ${res.status} ${errBody}`)
+      return NextResponse.json({ error: errBody }, { status: 502 })
     }
 
     return NextResponse.json({ ok: true })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
+    console.error(`[send-media] Exception: ${msg}`)
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
