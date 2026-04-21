@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import ConversationView from '@/components/ConversationView'
 
-export default function InboxConversationPage({
+export default function LeadsConversationPage({
   params,
 }: {
   params: Promise<{ phone: string }>
@@ -22,7 +22,7 @@ export default function InboxConversationPage({
         <ConversationView
           remoteJid={decodedPhone}
           phoneHint={phoneFromQuery}
-          backHref="/inbox"
+          backHref="/leads"
         />
       </main>
     </div>

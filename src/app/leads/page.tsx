@@ -374,7 +374,7 @@ export default function LeadsPage() {
                     {/* Follow-up badge */}
                     {!contact.is_bot && (
                       <Link
-                        href={`/inbox/${encodeURIComponent(contact.remoteJid)}?phone=${encodeURIComponent(contact.phone)}&from=leads`}
+                        href={`/leads/${encodeURIComponent(contact.remoteJid)}?phone=${encodeURIComponent(contact.phone)}`}
                         title={followup ? `Follow-up: ${followup.label}` : 'Definir follow-up'}
                         className={`flex items-center gap-1.5 text-xs px-2.5 py-2 rounded-lg transition-colors ${
                           followup
@@ -409,7 +409,7 @@ export default function LeadsPage() {
                     </button>
 
                     <Link
-                      href={`/inbox/${encodeURIComponent(contact.remoteJid)}?phone=${encodeURIComponent(contact.phone)}&from=leads`}
+                      href={`/leads/${encodeURIComponent(contact.remoteJid)}?phone=${encodeURIComponent(contact.phone)}`}
                       onClick={() => markAsRead(contact.remoteJid)}
                       className="flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs px-3 py-2 rounded-lg transition-colors"
                     >
