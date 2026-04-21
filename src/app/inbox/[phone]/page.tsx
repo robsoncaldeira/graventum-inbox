@@ -224,7 +224,7 @@ export default function ConversationPage({
   }
 
   const { data, mutate, isLoading } = useSWR<ConversationData>(
-    `/api/inbox/${encodeURIComponent(decodedPhone)}`,
+    `/api/inbox/${encodeURIComponent(decodedPhone)}${phoneFromQuery ? `?phone=${encodeURIComponent(phoneFromQuery)}` : ''}`,
     fetcher,
     { refreshInterval: 30000 }
   )

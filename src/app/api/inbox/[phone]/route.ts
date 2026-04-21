@@ -52,6 +52,7 @@ export async function GET(
 
   const { phone: phoneParam } = await params
   const remoteJid = decodeURIComponent(phoneParam)
+  const phoneHint = req.nextUrl.searchParams.get('phone') ?? null
 
   try {
     // 1. Buscar mensagens do JID principal
@@ -61,7 +62,24 @@ export async function GET(
     const altJid = primaryRecords
       .map((m) => (m.key as Record<string, string>)?.remoteJidAlt)
       .find((v) => !!v) ?? null
-    const phone = jidToPhone(remoteJid, altJid)
+    let phone = jidToPhone(remoteJid, altJid)
+
+    // 2b. Se phone parece ser um LID (>13 digitos ou nao comeca com codigo de pais valido),
+    //     tentar resolver via inbox_contacts (remote_jid → phone) ou phoneHint da query string
+    const isLikelyLid = phone.length > 13 || !/^[1-9]\d{0,2}/.test(phone)
+    if (isLikelyLid) {
+      // Buscar por remote_jid no inbox_contacts
+      const { data: lidLookup } = await getSupabase()
+        .from('inbox_contacts')
+        .select('phone')
+        .eq('remote_jid', remoteJid)
+        .maybeSingle()
+      if (lidLookup?.phone && lidLookup.phone.length <= 13) {
+        phone = lidLookup.phone
+      } else if (phoneHint && phoneHint.length <= 13 && /^\d+$/.test(phoneHint)) {
+        phone = phoneHint
+      }
+    }
 
     // 3. Buscar JID alternativo no Supabase (remote_jid salvo pelo ContactPanel)
     const { data: crmRecord } = await getSupabase()
