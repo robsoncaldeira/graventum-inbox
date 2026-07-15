@@ -1,8 +1,57 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabase } from '@/lib/supabase'
 import { isAuthenticatedFromRequest } from '@/lib/auth'
+import { WA_PROVIDER } from '@/lib/wa'
 
 export const dynamic = 'force-dynamic'
+
+async function gupshupConversations() {
+  const db = getSupabase()
+  // Ultimas mensagens (ordem desc) -> reduz para a mais recente por telefone.
+  const { data: rows } = await db
+    .from('wa_messages')
+    .select('contact_phone, direction, body, media_type, status, wa_timestamp')
+    .order('wa_timestamp', { ascending: false })
+    .limit(2000)
+
+  const lastByPhone = new Map<string, Record<string, unknown>>()
+  for (const r of rows ?? []) {
+    const phone = r.contact_phone as string
+    if (!lastByPhone.has(phone)) lastByPhone.set(phone, r)
+  }
+
+  const conversations = Array.from(lastByPhone.entries()).map(([phone, r]) => ({
+    remoteJid: phone,
+    contact_phone: phone,
+    pushName: null as string | null,
+    ultima_mensagem: (r.wa_timestamp as string) || new Date().toISOString(),
+    preview: (r.body as string) || (r.media_type ? `[${r.media_type}]` : ''),
+    unreadCount: 0,
+    fromMe: r.direction === 'outbound',
+  }))
+
+  const phones = conversations.map((c) => c.contact_phone)
+  const [{ data: leads }, { data: contacts }] = await Promise.all([
+    db.from('graventum_commercial_leads').select('whatsapp, company_name, status_lead, segmento').in('whatsapp', phones),
+    db.from('inbox_contacts').select('phone, company_name, contact_name, last_read_at').in('phone', phones),
+  ])
+  const leadsMap = new Map((leads ?? []).map((l) => [l.whatsapp, l]))
+  const contactsMap = new Map((contacts ?? []).map((c) => [c.phone, c]))
+
+  return conversations
+    .sort((a, b) => new Date(b.ultima_mensagem).getTime() - new Date(a.ultima_mensagem).getTime())
+    .map((c) => {
+      const lead = leadsMap.get(c.contact_phone)
+      const contact = contactsMap.get(c.contact_phone)
+      return {
+        ...c,
+        company_name: lead?.company_name ?? contact?.company_name ?? null,
+        status_lead: lead?.status_lead ?? null,
+        segmento: lead?.segmento ?? null,
+        contact_name: contact?.contact_name ?? null,
+      }
+    })
+}
 
 const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL!
 const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY!
@@ -29,6 +78,14 @@ function extractPreview(lastMsg: Record<string, unknown> | null): string {
 export async function GET(req: NextRequest) {
   if (!isAuthenticatedFromRequest(req)) {
     return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
+  }
+
+  if (WA_PROVIDER === 'gupshup') {
+    try {
+      return NextResponse.json(await gupshupConversations())
+    } catch (err) {
+      return NextResponse.json({ error: String(err) }, { status: 500 })
+    }
   }
 
   try {

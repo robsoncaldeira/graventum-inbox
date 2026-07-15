@@ -62,8 +62,8 @@ export default function InboxPage() {
   const [createError, setCreateError] = useState('')
 
   const { data, isLoading, error, mutate } = useSWR<Conversation[]>('/api/inbox', fetcher, {
-    refreshInterval: 30000,
-    revalidateOnFocus: false,
+    refreshInterval: 10000,
+    revalidateOnFocus: true,
   })
 
   function markAsRead(remoteJid: string) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const PUBLIC_PATHS = ['/login', '/api/login']
+// /api/webhook/* e publico (validado por token proprio) — o Gupshup posta sem cookie.
+const PUBLIC_PATHS = ['/login', '/api/login', '/api/webhook']
 const EMBED_KEY = process.env.INBOX_EMBED_KEY || ''
 
 export function middleware(req: NextRequest) {

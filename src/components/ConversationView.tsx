@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import useSWR from 'swr'
 import Link from 'next/link'
 import ContactPanel from '@/components/ContactPanel'
+import { getBrowserSupabase } from '@/lib/supabase-browser'
 import { ArrowLeft, Send, Loader2, Paperclip, SlidersHorizontal, Bot, Mic, Trash2 } from 'lucide-react'
 
 type Message = {
@@ -224,10 +225,26 @@ export default function ConversationView({
   const { data, mutate, isLoading } = useSWR<ConversationData>(
     `/api/inbox/${encodeURIComponent(remoteJid)}${phoneHint ? `?phone=${encodeURIComponent(phoneHint)}` : ''}`,
     fetcher,
-    { refreshInterval: 30000 }
+    { refreshInterval: 5000 }
   )
 
   const actualPhone = data?.phone ?? phoneHint ?? remoteJid.replace('@s.whatsapp.net', '').replace('@lid', '')
+
+  // Tempo real: assina mudancas de wa_messages deste contato (se anon key + RLS habilitados).
+  // Cai no polling de 5s acima quando indisponivel.
+  useEffect(() => {
+    const sb = getBrowserSupabase()
+    if (!sb || !actualPhone) return
+    const channel = sb
+      .channel(`wa:${actualPhone}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'wa_messages', filter: `contact_phone=eq.${actualPhone}` },
+        () => { mutate() },
+      )
+      .subscribe()
+    return () => { sb.removeChannel(channel) }
+  }, [actualPhone, mutate])
   const { data: contactData, mutate: mutateContact } = useSWR<ContactData | null>(
     actualPhone ? `/api/contacts/${encodeURIComponent(actualPhone)}` : null,
     fetcher

@@ -1,8 +1,64 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabase } from '@/lib/supabase'
 import { isAuthenticatedFromRequest } from '@/lib/auth'
+import { WA_PROVIDER } from '@/lib/wa'
 
 export const dynamic = 'force-dynamic'
+
+async function gupshupLeads() {
+  const db = getSupabase()
+  const { data: rows } = await db
+    .from('wa_messages')
+    .select('contact_phone, direction, body, media_type, wa_timestamp')
+    .order('wa_timestamp', { ascending: false })
+    .limit(2000)
+
+  const lastByPhone = new Map<string, Record<string, unknown>>()
+  for (const r of rows ?? []) {
+    const phone = r.contact_phone as string
+    if (!lastByPhone.has(phone)) lastByPhone.set(phone, r)
+  }
+
+  const contacts = Array.from(lastByPhone.entries()).map(([phone, r]) => {
+    const fromMe = r.direction === 'outbound'
+    return {
+      remoteJid: phone,
+      phone,
+      pushName: null as string | null,
+      preview: (r.body as string) || (r.media_type ? `[${r.media_type}]` : ''),
+      unreadCount: 0,
+      fromMe,
+      ultima_mensagem: (r.wa_timestamp as string) || new Date().toISOString(),
+      _defaultEstagio: fromMe ? 'novo' : 'em_conversa',
+    }
+  })
+
+  const phones = contacts.map((c) => c.phone)
+  const { data: crmData } = await db
+    .from('inbox_contacts')
+    .select('phone, push_name, company_name, contact_name, estagio, icp_fit, proximo_followup, sentimento, notas, is_bot, last_read_at')
+    .in('phone', phones)
+  const crmByPhone = new Map((crmData ?? []).map((r) => [r.phone, r]))
+
+  return contacts
+    .sort((a, b) => new Date(b.ultima_mensagem).getTime() - new Date(a.ultima_mensagem).getTime())
+    .map((c) => {
+      const crm = crmByPhone.get(c.phone)
+      const isRead = crm?.last_read_at ? new Date(crm.last_read_at) >= new Date(c.ultima_mensagem) : false
+      return {
+        ...c,
+        unreadCount: isRead ? 0 : c.unreadCount,
+        company_name: crm?.company_name ?? null,
+        contact_name: crm?.contact_name ?? null,
+        estagio: crm?.estagio ?? c._defaultEstagio,
+        icp_fit: crm?.icp_fit ?? null,
+        proximo_followup: crm?.proximo_followup ?? null,
+        sentimento: crm?.sentimento ?? null,
+        is_bot: crm?.is_bot ?? false,
+        has_crm: !!crm,
+      }
+    })
+}
 
 const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL!
 const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY!
@@ -27,6 +83,15 @@ function extractPreview(lastMsg: Record<string, unknown> | null): string {
 export async function GET(req: NextRequest) {
   if (!isAuthenticatedFromRequest(req)) {
     return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
+  }
+
+  if (WA_PROVIDER === 'gupshup') {
+    try {
+      return NextResponse.json(await gupshupLeads())
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      return NextResponse.json({ error: msg }, { status: 500 })
+    }
   }
 
   try {

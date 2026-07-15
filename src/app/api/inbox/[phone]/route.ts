@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabase } from '@/lib/supabase'
 import { isAuthenticatedFromRequest } from '@/lib/auth'
+import { WA_PROVIDER, normalizePhone } from '@/lib/wa'
 
 export const dynamic = 'force-dynamic'
 
@@ -53,6 +54,46 @@ export async function GET(
   const { phone: phoneParam } = await params
   const remoteJid = decodeURIComponent(phoneParam)
   const phoneHint = req.nextUrl.searchParams.get('phone') ?? null
+
+  // ─── Provider Gupshup: thread persistida em wa_messages ───
+  if (WA_PROVIDER === 'gupshup') {
+    const phone = normalizePhone(phoneHint || remoteJid)
+    try {
+      const { data: rows } = await getSupabase()
+        .from('wa_messages')
+        .select('id, direction, body, media_url, media_type, status, wa_timestamp')
+        .eq('contact_phone', phone)
+        .order('wa_timestamp', { ascending: true })
+        .limit(500)
+
+      const messages = (rows ?? []).map((m) => ({
+        id: m.id as string,
+        direction: m.direction as 'inbound' | 'outbound',
+        event_text: (m.body as string) ?? '',
+        ocorrido_em: m.wa_timestamp as string,
+        event_type: (m.media_type as string) || 'text',
+        media_url: (m.media_url as string) || undefined,
+        status: (m.status as string) || undefined,
+        metadata: m.direction === 'outbound' ? { sent_by: 'team_inbox' } : undefined,
+      }))
+
+      // Marca leitura (fire-and-forget)
+      getSupabase()
+        .from('inbox_contacts')
+        .upsert({ phone, last_read_at: new Date().toISOString() }, { onConflict: 'phone' })
+        .then(() => {})
+
+      const { data: leadData } = await getSupabase()
+        .from('graventum_commercial_leads')
+        .select('company_name, status_lead, segmento, score_fit_graventum, cidade, estado')
+        .eq('whatsapp', phone)
+        .maybeSingle()
+
+      return NextResponse.json({ messages, lead: leadData, phone })
+    } catch (err) {
+      return NextResponse.json({ error: String(err) }, { status: 500 })
+    }
+  }
 
   try {
     // 1. Buscar mensagens do JID principal

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isAuthenticatedFromRequest } from '@/lib/auth'
+import { WA_PROVIDER } from '@/lib/wa'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,6 +20,14 @@ function getMediaType(filename: string): string {
 export async function POST(req: NextRequest) {
   if (!isAuthenticatedFromRequest(req)) {
     return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
+  }
+
+  // Gupshup exige URL publica para midia (upload a storage ainda nao provisionado).
+  if (WA_PROVIDER === 'gupshup') {
+    return NextResponse.json(
+      { error: 'Envio de midia via Gupshup ainda nao habilitado. Use texto/template por enquanto.' },
+      { status: 501 },
+    )
   }
 
   const formData = await req.formData()
