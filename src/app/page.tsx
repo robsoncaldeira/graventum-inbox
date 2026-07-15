@@ -1,11 +1,6 @@
 import { redirect } from 'next/navigation'
-import { cookies } from 'next/headers'
 
-export default async function Home() {
-  const cookieStore = await cookies()
-  const session = cookieStore.get('inbox_session')
-  if (session?.value === 'ok') {
-    redirect('/inbox')
-  }
-  redirect('/login')
+export default function Home() {
+  // Middleware ja garante sessao (via embed_key do portal AMI)
+  redirect('/inbox')
 }

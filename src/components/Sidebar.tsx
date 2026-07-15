@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import { MessageCircle, Users, LogOut } from 'lucide-react'
 
 const NAV = [
@@ -15,11 +15,10 @@ function clsxSimple(...classes: (string | boolean | undefined)[]) {
 
 export default function Sidebar() {
   const pathname = usePathname()
-  const router = useRouter()
 
   async function handleLogout() {
     await fetch('/api/logout', { method: 'POST' })
-    router.push('/login')
+    window.location.href = 'https://ami.graventum.com'
   }
 
   return (

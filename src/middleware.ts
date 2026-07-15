@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 // /api/webhook/* e publico (validado por token proprio) — o Gupshup posta sem cookie.
-const PUBLIC_PATHS = ['/login', '/api/login', '/api/webhook']
+const PUBLIC_PATHS = ['/api/webhook']
+// Sem login proprio: acesso e sempre via portal AMI (iframe com embed_key).
+const PORTAL_URL = 'https://ami.graventum.com'
 const EMBED_KEY = process.env.INBOX_EMBED_KEY || ''
 
 export function middleware(req: NextRequest) {
@@ -14,7 +16,7 @@ export function middleware(req: NextRequest) {
   const isEmbedAuth = EMBED_KEY && embedKey === EMBED_KEY
 
   if (!isPublic && session !== 'ok' && !isEmbedAuth) {
-    return NextResponse.redirect(new URL('/login', req.url))
+    return NextResponse.redirect(PORTAL_URL)
   }
 
   // If embed auth, set cookie so subsequent navigations within iframe work
